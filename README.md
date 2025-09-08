@@ -8,8 +8,8 @@ pvz-root/                          ← Maven 聚合父模块目录
 │       │   ├── java/              ← Java 源码根目录
 │       │   │   └── com/pvz/game/
 │       │   │       ├── api/       ← Java 包（接口）
-│       │   │       ├── event/     ← Java 包（事件DTO）
-│       │   │       ├── model/     ← Java 包（实体类）
+│       │   │       ├── events/     ← Java 包（事件DTO）
+│       │   │       ├── modules/     ← Java 包（实体类）
 │       │   │       ├── rule/      ← Java 包（规则接口）
 │       │   │       └── internal/  ← Java 包（实现类，包私有）
 │       │   └── resources/         ← 资源目录（非代码）
