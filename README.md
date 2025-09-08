@@ -6,7 +6,7 @@ pvz/                                 ← IDEA 工程根 & Git 仓库
 ├── game-core/                       ← Maven 子模块：纯游戏逻辑，零 JavaFX
 │   ├── pom.xml                      ← 当前模块依赖（仅 slf4j + junit）
 │   └── src/main/java/com/game/pvz
-│       ├── core/                    ← 老师要求：Core(核心)
+│       ├── core/                    ← Core(核心)
 │       │   ├── event/               ← 事件DTO（只读记录）
 │       │   │   ├─ GameEvent.java    // 所有事件的根密封接口
 │       │   │   ├─ GameTick.java     // 每帧逻辑触发事件（记录类）
@@ -41,7 +41,7 @@ pvz/                                 ← IDEA 工程根 & Git 仓库
 │       │       ├─ Board.java        // 整个棋盘（类）
 │       │       ├─ Lane.java         // 单车道（类）
 │       │       └─ Row.java          // 横行（类）
-│       └── physics/                 ← 老师要求：物理特性
+│       └── physics/                 ← 物理特性
 │           ├── PhysicsBody.java     // 刚体数据（记录类）
 │           ├── Bounds.java          // 包围盒（记录类）
 │           └── PhysicsUtils.java    // 物理工具（类）
