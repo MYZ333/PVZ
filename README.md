@@ -8,7 +8,9 @@ pvz/                                 ← IDEA 工程根 & Git 仓库
 │   └── src/main/java/com/game/pvz
 │       ├── core/                    ← Core(核心)
 │       │   ├── event/               ← 事件DTO（只读记录）
-│       │   │   ├─ GameEvent.java    // 所有事件的根密封接口
+│       │   │   ├─ GameEvent.java   // 所有事件的父类
+│       │   │   │─ EventBus         //事件总线
+│       │   │   │─ GameEventListener//监听器
 │       │   │   ├─ GameTick.java     // 每帧逻辑触发事件（记录类）
 │       │   │   ├─ PlantPlaced.java  // 植物放置成功事件（记录类）
 │       │   │   └─ ZombieDied.java   // 僵尸死亡事件（记录类）
