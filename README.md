@@ -15,6 +15,7 @@ pvz/                                 ← IDEA 工程根 & Git 仓库
 │       │   │   ├─ PlantPlaced.java  // 植物放置成功事件（记录类）
 │       │   │   └─ ZombieDied.java   // 僵尸死亡事件（记录类）
 │       │   └── service/             ← 核心服务接口 & 实现
+│       │       ├─ InputHandle         // 【接口】输入
 │       │       ├─ GameLoopService.java // 【接口】游戏主循环驱动
 │       │       ├─ SpawnService.java    // 【接口】刷怪/刷阳光
 │       │       ├─ CollideService.java  // 【接口】碰撞检测
