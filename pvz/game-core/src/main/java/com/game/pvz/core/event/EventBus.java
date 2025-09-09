@@ -1,4 +1,4 @@
 package com.game.pvz.core.event;
 
-public class GameEvent {
+public class EventBus {
 }
