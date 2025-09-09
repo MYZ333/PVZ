@@ -29,6 +29,32 @@
     <libtiled.version>1.4.3</libtiled.version>
   </properties>
 
+  <repositories>
+    <!-- 保留原有的阿里云仓库（下载其他依赖更快） -->
+    <repository>
+      <id>nexus-aliyun</id>
+      <url>http://maven.aliyun.com/nexus/content/groups/public</url>
+      <releases>
+        <enabled>true</enabled> <!-- 允许下载正式版依赖 -->
+      </releases>
+      <snapshots>
+        <enabled>false</enabled> <!-- 禁用快照版（避免不稳定版本） -->
+      </snapshots>
+    </repository>
+
+    <!-- 新增 Maven 中央仓库（补充阿里云没有的依赖） -->
+    <repository>
+      <id>maven-central</id>
+      <url>https://repo1.maven.org/maven2</url> <!-- 中央仓库官方地址 -->
+      <releases>
+        <enabled>true</enabled>
+      </releases>
+      <snapshots>
+        <enabled>false</enabled>
+      </snapshots>
+    </repository>
+  </repositories>
+
   <!-- 依赖管理 -->
   <dependencyManagement>
     <dependencies>
@@ -80,6 +106,7 @@
         <artifactId>libtiled</artifactId>
         <version>${libtiled.version}</version>
       </dependency>
+
     </dependencies>
   </dependencyManagement>
 
