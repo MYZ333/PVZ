@@ -2,139 +2,104 @@
 <project xmlns="http://maven.apache.org/POM/4.0.0"
          xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
          xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
-  <modelVersion>4.0.0</modelVersion>
+    <modelVersion>4.0.0</modelVersion>
 
-  <groupId>com.game</groupId>
-  <artifactId>pvz-parent</artifactId>
-  <version>1.0.0</version>
-  <packaging>pom</packaging>
-  <name>Plants vs. Zombies</name>
-  <description>Plants vs. Zombies game implementation with JavaFX</description>
+    <groupId>com.game</groupId>
+    <artifactId>pvz</artifactId>
+    <version>1.0-SNAPSHOT</version>
+    <packaging>pom</packaging>
+    <name>Plants vs. Zombies</name>
+    <description>Plants vs. Zombies Game Project</description>
 
-  <!-- 子模块声明 -->
-  <modules>
-    <module>game-core</module>
-    <module>ui-fx</module>
-    <module>desktop-launcher</module>
-  </modules>
+    <modules>
+        <module>game-core</module>
+        <module>ui-fx</module>
+        <module>desktop-launcher</module>
+    </modules>
 
-  <!-- 版本管理 -->
-  <properties>
-    <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
-    <maven.compiler.source>17</maven.compiler.source>
-    <maven.compiler.target>17</maven.compiler.target>
-    <javafx.version>17.0.2</javafx.version>
-    <slf4j.version>2.0.7</slf4j.version>
-    <junit.version>5.9.2</junit.version>
-    <libtiled.version>1.4.3</libtiled.version>
-  </properties>
+    <properties>
+        <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+        <maven.compiler.source>17</maven.compiler.source>
+        <maven.compiler.target>17</maven.compiler.target>
+        <javafx.version>17.0.2</javafx.version>
+        <slf4j.version>1.7.36</slf4j.version>
+        <junit.version>5.8.2</junit.version>
+        <libtiled.version>1.4.3</libtiled.version>
+    </properties>
 
-  <repositories>
-    <!-- 保留原有的阿里云仓库（下载其他依赖更快） -->
-    <repository>
-      <id>nexus-aliyun</id>
-      <url>http://maven.aliyun.com/nexus/content/groups/public</url>
-      <releases>
-        <enabled>true</enabled> <!-- 允许下载正式版依赖 -->
-      </releases>
-      <snapshots>
-        <enabled>false</enabled> <!-- 禁用快照版（避免不稳定版本） -->
-      </snapshots>
-    </repository>
+    <dependencyManagement>
+        <dependencies>
+            <!-- JavaFX -->
+            <dependency>
+                <groupId>org.openjfx</groupId>
+                <artifactId>javafx-controls</artifactId>
+                <version>${javafx.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>org.openjfx</groupId>
+                <artifactId>javafx-fxml</artifactId>
+                <version>${javafx.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>org.openjfx</groupId>
+                <artifactId>javafx-graphics</artifactId>
+                <version>${javafx.version}</version>
+            </dependency>
 
-    <!-- 新增 Maven 中央仓库（补充阿里云没有的依赖） -->
-    <repository>
-      <id>maven-central</id>
-      <url>https://repo1.maven.org/maven2</url> <!-- 中央仓库官方地址 -->
-      <releases>
-        <enabled>true</enabled>
-      </releases>
-      <snapshots>
-        <enabled>false</enabled>
-      </snapshots>
-    </repository>
-  </repositories>
+            <!-- Logging -->
+            <dependency>
+                <groupId>org.slf4j</groupId>
+                <artifactId>slf4j-api</artifactId>
+                <version>${slf4j.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>org.slf4j</groupId>
+                <artifactId>slf4j-simple</artifactId>
+                <version>${slf4j.version}</version>
+                <scope>runtime</scope>
+            </dependency>
 
-  <!-- 依赖管理 -->
-  <dependencyManagement>
-    <dependencies>
-      <!-- JavaFX -->
-      <dependency>
-        <groupId>org.openjfx</groupId>
-        <artifactId>javafx-controls</artifactId>
-        <version>${javafx.version}</version>
-      </dependency>
-      <dependency>
-        <groupId>org.openjfx</groupId>
-        <artifactId>javafx-fxml</artifactId>
-        <version>${javafx.version}</version>
-      </dependency>
-      <dependency>
-        <groupId>org.openjfx</groupId>
-        <artifactId>javafx-media</artifactId>
-        <version>${javafx.version}</version>
-      </dependency>
-      <dependency>
-        <groupId>org.openjfx</groupId>
-        <artifactId>javafx-graphics</artifactId>
-        <version>${javafx.version}</version>
-      </dependency>
+            <!-- Testing -->
+            <dependency>
+                <groupId>org.junit.jupiter</groupId>
+                <artifactId>junit-jupiter-api</artifactId>
+                <version>${junit.version}</version>
+                <scope>test</scope>
+            </dependency>
+            <dependency>
+                <groupId>org.junit.jupiter</groupId>
+                <artifactId>junit-jupiter-engine</artifactId>
+                <version>${junit.version}</version>
+                <scope>test</scope>
+            </dependency>
 
-      <!-- 日志 -->
-      <dependency>
-        <groupId>org.slf4j</groupId>
-        <artifactId>slf4j-api</artifactId>
-        <version>${slf4j.version}</version>
-      </dependency>
-      <dependency>
-        <groupId>org.slf4j</groupId>
-        <artifactId>slf4j-simple</artifactId>
-        <version>${slf4j.version}</version>
-      </dependency>
+            <!-- Tiled Map Support -->
+            <dependency>
+                <groupId>org.mapeditor</groupId>
+                <artifactId>libtiled</artifactId>
+                <version>${libtiled.version}</version>
+            </dependency>
+        </dependencies>
+    </dependencyManagement>
 
-      <!-- 测试 -->
-      <dependency>
-        <groupId>org.junit.jupiter</groupId>
-        <artifactId>junit-jupiter-api</artifactId>
-        <version>${junit.version}</version>
-        <scope>test</scope>
-      </dependency>
-
-      <!-- Tiled地图库 -->
-      <dependency>
-        <groupId>org.mapeditor</groupId>
-        <artifactId>libtiled</artifactId>
-        <version>${libtiled.version}</version>
-      </dependency>
-
-    </dependencies>
-  </dependencyManagement>
-
-  <!-- 全局构建配置 -->
-  <build>
-    <pluginManagement>
-      <plugins>
-        <plugin>
-          <groupId>org.apache.maven.plugins</groupId>
-          <artifactId>maven-compiler-plugin</artifactId>
-          <version>3.10.1</version>
-          <configuration>
-            <source>${maven.compiler.source}</source>
-            <target>${maven.compiler.target}</target>
-          </configuration>
-        </plugin>
-      </plugins>
-    </pluginManagement>
-
-    <!-- 资源配置 - 包含根目录的assets文件夹 -->
-    <resources>
-      <resource>
-        <directory>${project.basedir}/assets</directory>
-        <targetPath>${project.build.directory}/classes/assets</targetPath>
-      </resource>
-      <resource>
-        <directory>src/main/resources</directory>
-      </resource>
-    </resources>
-  </build>
+    <build>
+        <pluginManagement>
+            <plugins>
+                <plugin>
+                    <groupId>org.apache.maven.plugins</groupId>
+                    <artifactId>maven-compiler-plugin</artifactId>
+                    <version>3.10.1</version>
+                    <configuration>
+                        <source>${maven.compiler.source}</source>
+                        <target>${maven.compiler.target}</target>
+                    </configuration>
+                </plugin>
+                <plugin>
+                    <groupId>org.apache.maven.plugins</groupId>
+                    <artifactId>maven-surefire-plugin</artifactId>
+                    <version>3.0.0-M7</version>
+                </plugin>
+            </plugins>
+        </pluginManagement>
+    </build>
 </project>

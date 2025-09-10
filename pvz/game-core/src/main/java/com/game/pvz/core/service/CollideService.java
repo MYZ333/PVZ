@@ -1,12 +1,8 @@
 package com.game.pvz.core.service;
 
+/**
+ * 【接口】碰撞检测
+ */
 public interface CollideService {
-    double getX();
-    double getY();
-    double getWidth();
-    double getHeight();
-
-    default boolean checkCollision(CollideService other){
-        return true;
-    }
+    void checkCollisions();
 }

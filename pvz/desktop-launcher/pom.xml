@@ -4,51 +4,21 @@
          xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
     <parent>
         <groupId>com.game</groupId>
-        <artifactId>pvz-parent</artifactId>
-        <version>1.0.0</version>
+        <artifactId>pvz</artifactId>
+        <version>1.0-SNAPSHOT</version>
     </parent>
-
     <modelVersion>4.0.0</modelVersion>
+
     <artifactId>desktop-launcher</artifactId>
-    <name>Desktop Launcher</name>
-    <description>Desktop launcher for the game</description>
+    <name>PVZ Desktop Launcher</name>
+    <description>Desktop launcher for Plants vs. Zombies</description>
 
     <dependencies>
-        <!-- 依赖UI模块 -->
+        <!-- UI Module -->
         <dependency>
             <groupId>com.game</groupId>
             <artifactId>ui-fx</artifactId>
             <version>${project.version}</version>
         </dependency>
     </dependencies>
-
-    <build>
-        <plugins>
-            <!-- JavaFX打包插件 -->
-            <plugin>
-                <groupId>org.openjfx</groupId>
-                <artifactId>javafx-maven-plugin</artifactId>
-                <version>0.0.8</version>
-                <configuration>
-                    <mainClass>com.game.pvz.launcher.Launcher</mainClass>
-                    <launcher>pvz-game</launcher>
-                    <jlinkImageName>pvz-game</jlinkImageName>
-                    <jlinkZipName>pvz-game-dist</jlinkZipName>
-                    <options>
-                        <option>--add-modules</option>
-                        <option>javafx.controls,javafx.fxml,javafx.media</option>
-                    </options>
-                </configuration>
-                <executions>
-                    <execution>
-                        <id>create-runtime-image</id>
-                        <phase>package</phase>
-                        <goals>
-                            <goal>jlink</goal>
-                        </goals>
-                    </execution>
-                </executions>
-            </plugin>
-        </plugins>
-    </build>
 </project>
