@@ -113,7 +113,7 @@ public class BattleScene extends Scene {
         // 创建主布局容器
         VBox mainLayout = new VBox(10);
         mainLayout.setPadding(new Insets(10));
-        mainLayout.setPrefSize(1200, 900);
+        mainLayout.setPrefSize(800, 600);
         
         // 顶部信息栏
         HBox topBar = new HBox(20);
