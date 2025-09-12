@@ -1,0 +1,114 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project version="4">
+  <component name="AutoImportSettings">
+    <option name="autoReloadType" value="SELECTIVE" />
+  </component>
+  <component name="ChangeListManager">
+    <list default="true" id="ffd71368-892c-4c8e-a361-f081e1f632cd" name="更改" comment="">
+      <change beforePath="$PROJECT_DIR$/pvz/game-core/src/main/java/com/game/pvz/module/entity/plant/Plant.java" beforeDir="false" afterPath="$PROJECT_DIR$/pvz/game-core/src/main/java/com/game/pvz/module/entity/plant/Plant.java" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/pvz/game-core/target/classes/com/game/pvz/core/event/EventBus.class" beforeDir="false" afterPath="$PROJECT_DIR$/pvz/game-core/target/classes/com/game/pvz/core/event/EventBus.class" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/pvz/game-core/target/classes/com/game/pvz/core/event/GameTick.class" beforeDir="false" afterPath="$PROJECT_DIR$/pvz/game-core/target/classes/com/game/pvz/core/event/GameTick.class" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/pvz/game-core/target/classes/com/game/pvz/core/event/PlantPlaced.class" beforeDir="false" afterPath="$PROJECT_DIR$/pvz/game-core/target/classes/com/game/pvz/core/event/PlantPlaced.class" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/pvz/game-core/target/classes/com/game/pvz/core/event/ZombieDied.class" beforeDir="false" afterPath="$PROJECT_DIR$/pvz/game-core/target/classes/com/game/pvz/core/event/ZombieDied.class" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/pvz/game-core/target/classes/com/game/pvz/core/event/ZombieSpawned.class" beforeDir="false" afterPath="$PROJECT_DIR$/pvz/game-core/target/classes/com/game/pvz/core/event/ZombieSpawned.class" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/pvz/game-core/target/classes/com/game/pvz/core/service/impl/GameLoopServiceImpl.class" beforeDir="false" afterPath="$PROJECT_DIR$/pvz/game-core/target/classes/com/game/pvz/core/service/impl/GameLoopServiceImpl.class" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/pvz/game-core/target/classes/com/game/pvz/core/service/impl/SpawnServiceImpl.class" beforeDir="false" afterPath="$PROJECT_DIR$/pvz/game-core/target/classes/com/game/pvz/core/service/impl/SpawnServiceImpl.class" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/pvz/game-core/target/classes/com/game/pvz/module/entity/Health.class" beforeDir="false" afterPath="$PROJECT_DIR$/pvz/game-core/target/classes/com/game/pvz/module/entity/Health.class" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/pvz/game-core/target/classes/com/game/pvz/module/entity/Position.class" beforeDir="false" afterPath="$PROJECT_DIR$/pvz/game-core/target/classes/com/game/pvz/module/entity/Position.class" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/pvz/game-core/target/classes/com/game/pvz/module/entity/plant/Plant$1.class" beforeDir="false" afterPath="$PROJECT_DIR$/pvz/game-core/target/classes/com/game/pvz/module/entity/plant/Plant$1.class" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/pvz/game-core/target/classes/com/game/pvz/module/entity/plant/Plant.class" beforeDir="false" afterPath="$PROJECT_DIR$/pvz/game-core/target/classes/com/game/pvz/module/entity/plant/Plant.class" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/pvz/game-core/target/classes/com/game/pvz/module/entity/plant/PlantType.class" beforeDir="false" afterPath="$PROJECT_DIR$/pvz/game-core/target/classes/com/game/pvz/module/entity/plant/PlantType.class" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/pvz/game-core/target/classes/com/game/pvz/module/entity/projectile/ProjectileType.class" beforeDir="false" afterPath="$PROJECT_DIR$/pvz/game-core/target/classes/com/game/pvz/module/entity/projectile/ProjectileType.class" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/pvz/game-core/target/classes/com/game/pvz/module/entity/zombie/Zombie.class" beforeDir="false" afterPath="$PROJECT_DIR$/pvz/game-core/target/classes/com/game/pvz/module/entity/zombie/Zombie.class" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/pvz/game-core/target/classes/com/game/pvz/module/entity/zombie/ZombieType.class" beforeDir="false" afterPath="$PROJECT_DIR$/pvz/game-core/target/classes/com/game/pvz/module/entity/zombie/ZombieType.class" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/pvz/game-core/target/classes/com/game/pvz/physics/Bounds.class" beforeDir="false" afterPath="$PROJECT_DIR$/pvz/game-core/target/classes/com/game/pvz/physics/Bounds.class" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/pvz/game-core/target/classes/com/game/pvz/physics/PhysicsBody.class" beforeDir="false" afterPath="$PROJECT_DIR$/pvz/game-core/target/classes/com/game/pvz/physics/PhysicsBody.class" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/pvz/ui-fx/src/main/java/com/game/pvz/ui/scene/BattleScene.java" beforeDir="false" afterPath="$PROJECT_DIR$/pvz/ui-fx/src/main/java/com/game/pvz/ui/scene/BattleScene.java" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/pvz/ui-fx/target/classes/com/game/pvz/ui/app/ResourcePool.class" beforeDir="false" afterPath="$PROJECT_DIR$/pvz/ui-fx/target/classes/com/game/pvz/ui/app/ResourcePool.class" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/pvz/ui-fx/target/classes/com/game/pvz/ui/component/SunLabel.class" beforeDir="false" afterPath="$PROJECT_DIR$/pvz/ui-fx/target/classes/com/game/pvz/ui/component/SunLabel.class" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/pvz/ui-fx/target/classes/com/game/pvz/ui/map/internal/LayerType.class" beforeDir="false" afterPath="$PROJECT_DIR$/pvz/ui-fx/target/classes/com/game/pvz/ui/map/internal/LayerType.class" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/pvz/ui-fx/target/classes/com/game/pvz/ui/scene/BattleScene$1.class" beforeDir="false" afterPath="$PROJECT_DIR$/pvz/ui-fx/target/classes/com/game/pvz/ui/scene/BattleScene$1.class" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/pvz/ui-fx/target/classes/com/game/pvz/ui/scene/BattleScene$2.class" beforeDir="false" afterPath="$PROJECT_DIR$/pvz/ui-fx/target/classes/com/game/pvz/ui/scene/BattleScene$2.class" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/pvz/ui-fx/target/classes/com/game/pvz/ui/scene/BattleScene$3.class" beforeDir="false" afterPath="$PROJECT_DIR$/pvz/ui-fx/target/classes/com/game/pvz/ui/scene/BattleScene$3.class" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/pvz/ui-fx/target/classes/com/game/pvz/ui/scene/BattleScene.class" beforeDir="false" afterPath="$PROJECT_DIR$/pvz/ui-fx/target/classes/com/game/pvz/ui/scene/BattleScene.class" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/pvz/ui-fx/target/classes/com/game/pvz/ui/scene/LevelSelectScene.class" beforeDir="false" afterPath="$PROJECT_DIR$/pvz/ui-fx/target/classes/com/game/pvz/ui/scene/LevelSelectScene.class" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/pvz/ui-fx/target/classes/com/game/pvz/ui/scene/MenuScene.class" beforeDir="false" afterPath="$PROJECT_DIR$/pvz/ui-fx/target/classes/com/game/pvz/ui/scene/MenuScene.class" afterDir="false" />
+    </list>
+    <option name="SHOW_DIALOG" value="false" />
+    <option name="HIGHLIGHT_CONFLICTS" value="true" />
+    <option name="HIGHLIGHT_NON_ACTIVE_CHANGELIST" value="false" />
+    <option name="LAST_RESOLUTION" value="IGNORE" />
+  </component>
+  <component name="Git.Settings">
+    <option name="RECENT_GIT_ROOT_PATH" value="$PROJECT_DIR$" />
+  </component>
+  <component name="GitHubPullRequestSearchHistory">{
+  &quot;lastFilter&quot;: {
+    &quot;state&quot;: &quot;OPEN&quot;,
+    &quot;assignee&quot;: &quot;dsq8609&quot;
+  }
+}</component>
+  <component name="GithubPullRequestsUISettings">{
+  &quot;selectedUrlAndAccountId&quot;: {
+    &quot;url&quot;: &quot;https://github.com/MYZ333/PVZ.git&quot;,
+    &quot;accountId&quot;: &quot;bdf208ca-3260-45b4-a713-5fc78bcb288a&quot;
+  }
+}</component>
+  <component name="ProjectColorInfo">{
+  &quot;associatedIndex&quot;: 0
+}</component>
+  <component name="ProjectId" id="32bBUfWipllNCFy0PaZTrPo7ghf" />
+  <component name="ProjectLevelVcsManager">
+    <ConfirmationsSetting value="1" id="Add" />
+  </component>
+  <component name="ProjectViewState">
+    <option name="hideEmptyMiddlePackages" value="true" />
+    <option name="showLibraryContents" value="true" />
+  </component>
+  <component name="PropertiesComponent"><![CDATA[{
+  "keyToString": {
+    "ASKED_SHARE_PROJECT_CONFIGURATION_FILES": "true",
+    "RunOnceActivity.ShowReadmeOnStart": "true",
+    "RunOnceActivity.git.unshallow": "true",
+    "git-widget-placeholder": "dev",
+    "kotlin-language-version-configured": "true",
+    "last_opened_file_path": "D:/learnJA/PVZ/pvz/ui-fx/src/main/resources/plants/sunflower",
+    "settings.editor.selected.configurable": "preferences.lookFeel",
+    "应用程序.Launcher.executor": "Run"
+  }
+}]]></component>
+  <component name="RecentsManager">
+    <key name="CopyFile.RECENT_KEYS">
+      <recent name="D:\learnJA\PVZ\pvz\ui-fx\src\main\resources\plants\sunflower" />
+    </key>
+    <key name="MoveFile.RECENT_KEYS">
+      <recent name="D:\learnJA\PVZ\pvz\ui-fx\src\main\resources\plants\cherry_bomb" />
+      <recent name="D:\learnJA\PVZ\pvz\ui-fx\src\main\resources\plants\sunflower" />
+      <recent name="D:\learnJA\PVZ\pvz\ui-fx\src\main\resources\pic" />
+    </key>
+  </component>
+  <component name="RunManager">
+    <configuration default="true" type="JetRunConfigurationType">
+      <module name="PVZ" />
+      <method v="2">
+        <option name="Make" enabled="true" />
+      </method>
+    </configuration>
+    <configuration default="true" type="KotlinStandaloneScriptRunConfigurationType">
+      <module name="PVZ" />
+      <option name="filePath" />
+      <method v="2" />
+    </configuration>
+  </component>
+  <component name="SpellCheckerSettings" RuntimeDictionaries="0" Folders="0" CustomDictionaries="0" DefaultDictionary="应用程序级" UseSingleDictionary="true" transferred="true" />
+  <component name="TaskManager">
+    <task active="true" id="Default" summary="默认任务">
+      <changelist id="ffd71368-892c-4c8e-a361-f081e1f632cd" name="更改" comment="" />
+      <created>1757679409448</created>
+      <option name="number" value="Default" />
+      <option name="presentableId" value="Default" />
+      <updated>1757679409448</updated>
+    </task>
+    <servers />
+  </component>
+</project>
