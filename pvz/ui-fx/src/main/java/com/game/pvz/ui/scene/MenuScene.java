@@ -1,6 +1,11 @@
 package com.game.pvz.ui.scene;
 
 import com.game.pvz.ui.app.Router;
+
+import javafx.geometry.Pos;
+import javafx.scene.Scene;
+import javafx.scene.control.Button;
+
 import com.game.pvz.ui.app.ResourcePool;
 import javafx.geometry.Pos;
 import javafx.scene.Scene;
@@ -9,11 +14,13 @@ import javafx.scene.image.Image;
 import javafx.scene.image.ImageView;
 import javafx.scene.layout.Background;
 import javafx.scene.layout.Border;
+
 import javafx.scene.layout.Pane;
 import javafx.scene.layout.VBox;
 import javafx.scene.text.Font;
 import javafx.scene.text.FontWeight;
 import javafx.scene.text.Text;
+
 import javafx.stage.Stage;
 import javafx.geometry.Insets;
 import java.util.ArrayList;
@@ -24,6 +31,7 @@ import javafx.stage.WindowEvent;
  * 主菜单场景（类）
  */
 public class MenuScene extends Scene {
+
     // 存储打开的子窗口
     private List<Stage> openWindows = new ArrayList<>();
     // 存储所有按钮
@@ -54,10 +62,12 @@ public class MenuScene extends Scene {
     private ImageView helpCloseButtonView;
     // 帮助菜单返回按钮图片的放大倍数
     private double helpCloseButtonImageScale = 1.28; // 默认不放大
+
     
     public MenuScene() {
         super(new Pane());
         initialize();
+
         // 添加窗口关闭事件监听器
         this.setOnKeyPressed(event -> {
             // 这里可以根据需要添加键盘关闭逻辑
@@ -554,5 +564,6 @@ public class MenuScene extends Scene {
         root.getChildren().add(exitButton);
         // 添加到按钮列表
         allButtons.add(exitButton);
+
     }
 }

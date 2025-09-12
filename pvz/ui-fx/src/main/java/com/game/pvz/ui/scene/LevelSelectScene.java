@@ -1,13 +1,18 @@
 package com.game.pvz.ui.scene;
 
 import com.game.pvz.ui.app.Router;
+
+
 import com.game.pvz.ui.app.ResourcePool;
+
 import javafx.geometry.Insets;
 import javafx.geometry.Pos;
 import javafx.scene.Scene;
 import javafx.scene.control.Button;
+
 import javafx.scene.image.Image;
 import javafx.scene.image.ImageView;
+
 import javafx.scene.layout.*;
 import javafx.scene.text.Font;
 import javafx.scene.text.FontWeight;
@@ -25,6 +30,8 @@ public class LevelSelectScene extends Scene {
     
     private void initialize() {
         Pane root = (Pane) getRoot();
+
+
         
         // 添加背景图片
         Image backgroundImage = ResourcePool.getInstance().getImage("/pic/levelback.png");
@@ -38,13 +45,16 @@ public class LevelSelectScene extends Scene {
             // 如果图片加载失败，使用备用背景色
             root.setStyle("-fx-background-color: #2a9d8f;");
         }
+
         
         // 创建VBox作为布局容器
         VBox layout = new VBox(20);
         layout.setAlignment(Pos.CENTER);
         layout.setPadding(new Insets(20));
+
         layout.setPrefSize(1200, 900);
         layout.setStyle("-fx-background-color: transparent;"); // 设为透明，不遮挡背景图
+
         
         // 添加标题
         Text title = new Text("选择关卡");

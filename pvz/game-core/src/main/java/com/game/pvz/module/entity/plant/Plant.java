@@ -176,7 +176,9 @@ public class Plant implements GameObject {
      */
     private Projectile createProjectile() {
         // 子弹从植物前方发射
-        Position projectilePos = new Position(position.x() + 30, position.y());
+ feature-zhangbo
+        Position projectilePos = new Position(position.x() + 105, position.y());
+
         // 根据植物类型确定子弹类型
         ProjectileType projectileType = ProjectileType.PEANUT;
 
