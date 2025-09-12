@@ -20,6 +20,8 @@ import com.game.pvz.module.entity.zombie.ZombieType;
 import com.game.pvz.ui.app.Router;
 import com.game.pvz.ui.app.ResourcePool;
 import javafx.animation.AnimationTimer;
+import javafx.animation.KeyFrame;
+import javafx.animation.Timeline;
 import javafx.geometry.Bounds;
 import javafx.geometry.Insets;
 import javafx.geometry.Pos;
@@ -44,6 +46,8 @@ import java.util.concurrent.CopyOnWriteArrayList;
 import com.game.pvz.module.entity.cart.Cart;
 import com.game.pvz.module.entity.cart.CartFactory;
 import com.game.pvz.module.entity.cart.CartType;
+import javafx.util.Duration;
+
 /**
  * 战场场景（类）
  */
@@ -59,6 +63,8 @@ public class BattleScene extends Scene {
     private Text battleStatusText; // 战斗状态显示
     private Button startButton;
     private Pane sunLayer; // 用于显示阳光的层
+    // 1. 首先，我们需要一个集合来跟踪所有下落中的阳光
+    private List<Sun> fallingSuns = new ArrayList<>();
     private Pane zombieLayer; // 用于显示僵尸的层
     private Pane projectileLayer; // 用于显示子弹的层
     private List<Sun> activeSuns; // 活跃的阳光实体列表
@@ -72,11 +78,13 @@ public class BattleScene extends Scene {
     private Map<UUID, Pane> zombieContainers = new HashMap<>(); // 僵尸容器映射
     private Map<Projectile, Pane> projectileViews = new HashMap<>(); // 子弹视图映射，直接使用Projectile对象作为键
     private Map<PlantType, String> plantImagePaths = new HashMap<>(); // 植物图片路径映射
+    private final Map<Sun, Double> sunTargetPositions = new HashMap<>(); // 阳光目标位置映射
     private SpawnService spawnService; // 僵尸生成服务
     private StackPane gameContainer; // 添加gameContainer作为类成员变量
     private List<Cart> carts = new ArrayList<>(); // 所有小推车列表
     private Map<Integer, Region> cartViews = new HashMap<>(); // 小推车视图映射（按车道索引）
-
+    private boolean isShovelMode = false; // 铲子模式标志
+    private Button shovelButton; // 铲子按钮
 
     public BattleScene(int level) {
         super(new Pane());
@@ -113,7 +121,9 @@ public class BattleScene extends Scene {
         // 创建主布局容器
         VBox mainLayout = new VBox(10);
         mainLayout.setPadding(new Insets(10));
+
         mainLayout.setPrefSize(1200, 700);
+
         
         // 顶部信息栏
         HBox topBar = new HBox(20);
@@ -150,6 +160,8 @@ public class BattleScene extends Scene {
             for (int col = 0; col < 12; col++) {
                 Pane cell = new Pane();
                 cell.setPrefSize(80, 80);
+
+
                 cell.setStyle("-fx-background-color: #3d5a14; -fx-border-color: #606c38; -fx-border-width: 1;");
                 
                 // 保存行列信息到单元格
@@ -163,27 +175,34 @@ public class BattleScene extends Scene {
         }
         // 创建阳光层，用于显示阳光
         sunLayer = new Pane();
+
         sunLayer.setPrefSize(984, 500); // 明确设置与gameContainer相同的大小
+
         sunLayer.setMouseTransparent(false); // 允许阳光接收点击事件
         // 确保阳光层的背景是透明的，不会遮挡下层内容
         sunLayer.setStyle("-fx-background-color: transparent;");
 
         // 僵尸层，用于专门放置僵尸
         zombieLayer = new Pane();
+
         zombieLayer.setPrefSize(984, 500);
+
         zombieLayer.setMouseTransparent(false);
 
         // 创建子弹层，用于显示子弹
         projectileLayer = new Pane();
         projectileLayer.setPrefSize(984, 500);
+
         projectileLayer.setMouseTransparent(true);
 
         // 创建并放置小推车（在每个车道的最左侧） - 移到这里，确保zombieLayer已经初始化
         for (int laneIndex = 0; laneIndex < 5; laneIndex++) {
             // 计算小推车的位置（车道最左侧）
+
             // 从代码中可以看出，每个车道的Y坐标计算方式为：laneIndex * 82 + 5
             // 最左侧的X坐标为10
-            Position cartPosition = new Position(10, laneIndex * 82 + 5);
+            Position cartPosition = new Position(10, laneIndex * 82 + 5+40);
+
 
             // 创建小推车实体
             Cart cart = CartFactory.getInstance().createDefaultCart(cartPosition, laneIndex);
@@ -194,6 +213,7 @@ public class BattleScene extends Scene {
         }
         // 创建一个容器来包裹游戏网格、僵尸层和阳光层
         gameContainer = new StackPane();
+
         gameContainer.setPrefSize(984, 500); // 设置适当的大小 (12列 x (80+2)像素)
         // 设置StackPane的对齐方式为左上角，确保gameGrid从(0,0)开始
         gameContainer.setAlignment(Pos.TOP_LEFT);
@@ -207,6 +227,7 @@ public class BattleScene extends Scene {
         offsetContainer.getChildren().add(gameGrid);
         
         gameContainer.getChildren().add(offsetContainer); // 第一层：带有偏移的游戏网格
+
         gameContainer.getChildren().add(zombieLayer); // 第二层：僵尸层
         gameContainer.getChildren().add(projectileLayer); // 第三层：子弹层
         gameContainer.getChildren().add(sunLayer); // 第四层：阳光层（在最上层，确保可以点击）
@@ -216,13 +237,20 @@ public class BattleScene extends Scene {
             // 计算点击位置对应的网格坐标
             double x = e.getX();
             double y = e.getY();
+
             // 考虑网格间隔和水平偏移量（减去82像素的偏移）
             int row = (int)Math.floor(y / (80 + 2));
             int col = (int)Math.floor((x - 82) / (80 + 2));
 
             // 检查点击位置是否在有效网格内
-            if (battleStarted && selectedPlantType != null && row >= 0 && row < 5 && col >= 0 && col < 12) {
-                placePlant(selectedPlantType, row, col);
+            if (battleStarted && row >= 0 && row < 5 && col >= 0 && col < 12) {
+                if (isShovelMode) {
+                    // 铲子模式下，尝试铲除植物
+                    removePlant(row, col);
+                } else if (selectedPlantType != null) {
+                    // 普通模式下，尝试放置植物
+                    placePlant(selectedPlantType, row, col);
+                }
             }
         });
 
@@ -238,7 +266,42 @@ public class BattleScene extends Scene {
         addPlantButton(PlantType.WALLNUT);
         addPlantButton(PlantType.CHERRY_BOMB);
         addPlantButton(PlantType.REPEATER);
-        
+        // 添加铲子按钮
+        shovelButton = new Button("铲子");
+        shovelButton.setPrefSize(80, 150);
+        shovelButton.setFont(Font.font("Arial", FontWeight.BOLD, 12));
+        shovelButton.setStyle("-fx-background-color: #6c757d; -fx-text-fill: white;");
+
+        VBox shovelBox = new VBox(5);
+        shovelBox.setAlignment(Pos.CENTER);
+        shovelBox.getChildren().add(shovelButton);
+        plantSelector.getChildren().add(shovelBox);
+        // 设置铲子按钮点击事件
+        shovelButton.setOnAction(e -> {
+            if (battleStarted) {
+                isShovelMode = !isShovelMode;
+                if (isShovelMode) {
+                    shovelButton.setStyle("-fx-background-color: #fefae0; -fx-text-fill: #6c757d;");
+                    battleStatusText.setText("已选择铲子，请点击植物铲除");
+                    selectedPlantType = null; // 取消植物选择
+                    // 恢复植物按钮样式
+                    for (javafx.scene.Node node : plantSelector.getChildren()) {
+                        if (node instanceof VBox) {
+                            VBox box = (VBox) node;
+                            if (box.getChildren().size() > 0 && box.getChildren().get(0) instanceof Button && box != shovelBox) {
+                                Button btn = (Button) box.getChildren().get(0);
+                                btn.setStyle("-fx-background-color: #bc6c25; -fx-text-fill: white;");
+                            }
+                        }
+                    }
+                } else {
+                    shovelButton.setStyle("-fx-background-color: #6c757d; -fx-text-fill: white;");
+                    battleStatusText.setText("已取消铲子模式");
+                }
+            } else {
+                battleStatusText.setText("请先开始战斗！");
+            }
+        });
         // 底部按钮栏
         HBox buttonBar = new HBox(20);
         buttonBar.setAlignment(Pos.CENTER);
@@ -262,7 +325,7 @@ public class BattleScene extends Scene {
         });
         
         buttonBar.getChildren().addAll(startButton, backButton);
-        
+
         // 将所有元素添加到主布局
         mainLayout.getChildren().addAll(topBar, gameContainer, plantSelector, buttonBar);
         // 添加这一行代码，确保gameContainer在水平方向上居中
@@ -279,7 +342,7 @@ public class BattleScene extends Scene {
         
         // 植物图标按钮
         Button plantButton = new Button(type.name());
-        plantButton.setPrefSize(80, 80);
+        plantButton.setPrefSize(80, 150);
         plantButton.setFont(Font.font("Arial", FontWeight.BOLD, 12));
         plantButton.setStyle("-fx-background-color: #bc6c25; -fx-text-fill: white;");
         
@@ -294,6 +357,11 @@ public class BattleScene extends Scene {
         // 设置按钮点击事件
         plantButton.setOnAction(e -> {
             if (battleStarted) {
+                // 点击植物卡片时取消铲子模式
+                if (isShovelMode) {
+                    isShovelMode = false;
+                    shovelButton.setStyle("-fx-background-color: #6c757d; -fx-text-fill: white;");
+                }
                 if (selectedPlantType == type) {
                     // 如果再次点击已选中的植物，则取消选择
                     selectedPlantType = null;
@@ -353,6 +421,7 @@ public class BattleScene extends Scene {
             renderZombie(testZombie, 1);
             System.out.println("测试僵尸已添加到场景");
 
+
             System.out.println("开始关卡 " + level + " 的战斗！");
         }
     }
@@ -376,7 +445,9 @@ public class BattleScene extends Scene {
             sunAmountText.setText("阳光: " + sunBankService.getSunAmount());
             
             // 创建植物实体
-            Position position = new Position(col * (80 + 2) + 40, row * (80 + 2) + 40); // 居中放置
+            double x = col * (80 + 2);
+            double y = row * (80 + 2);
+            Position position = new Position(x, y);
             Plant plant = PlantFactory.getInstance().createPlant(type, position);
             plants.add(plant);
             
@@ -501,8 +572,10 @@ public class BattleScene extends Scene {
             System.out.println("渲染僵尸: " + zombie.getType() + " 在车道 " + laneIndex);
             
             // 设置僵尸初始位置（从右侧进入）
+
             double x = 984; // 使用固定值，确保从屏幕右侧进入
             double y = laneIndex *82 + 5;  // 放置在对应车道
+
             
             // 创建僵尸视图容器
             Pane zombieContainer = new Pane();
@@ -597,16 +670,21 @@ public class BattleScene extends Scene {
     private void spawnSun() {
         // 随机生成阳光的位置（确保在可见区域内）
         int sunValue = 25; // 阳光价值
+
         int x = 30 + random.nextInt(924); // 随机X坐标 (确保在984宽度内)
-        int y = 30 + random.nextInt(440); // 随机Y坐标 (确保在500高度内)
-        Position position = new Position(x, y);
+        int startY = -30; // 从屏幕顶部外开始
+        int targetY = 30 + random.nextInt(400); // 目标Y坐标 (确保在500高度内)
 
-        // 创建阳光实体
-        Sun sun = new Sun(position, sunValue);
+        //Position position = new Position(x, y);
+
+        // 创建阳光实体，并存储目标位置信息
+        Sun sun = new Sun(new Position(x, startY), sunValue);
         activeSuns.add(sun);
-
+        fallingSuns.add(sun);
+        // 存储目标位置到sun对象
+        sunTargetPositions.put(sun, (double) targetY);
         // 创建阳光的可视化表示
-        Circle sunVisual = new Circle(position.x(), position.y(), 15);
+        Circle sunVisual = new Circle(x, startY, 15);
         sunVisual.setFill(Color.YELLOW);
         sunVisual.setStroke(Color.GOLD);
         sunVisual.setStrokeWidth(2);
@@ -614,14 +692,50 @@ public class BattleScene extends Scene {
         // 添加点击事件
         sunVisual.setOnMouseClicked(e -> {
             if (!sun.isCollected()) {
-                collectSun(sun, sunVisual);
+                collectSun(sun, sunVisual, sunTargetPositions);
             }
         });
 
         // 添加到阳光层
         sunLayer.getChildren().add(sunVisual);
 
+        // 存储阳光视图引用，用于更新位置
+        final Map<Sun, Circle> sunViews = new HashMap<>();
+        sunViews.put(sun, sunVisual);
         battleStatusText.setText("阳光出现了！");
+
+        // 创建下落动画
+        Timeline timeline = new Timeline(
+                new KeyFrame(Duration.millis(20), event -> {
+                    if (sun.isCollected() || !activeSuns.contains(sun)) {
+                        return;
+                    }
+
+                    // 获取当前位置和目标位置
+                    Position currentPos = sun.getPosition();
+                    double targetYPos = sunTargetPositions.get(sun);
+                    Circle visual = sunViews.get(sun);
+
+                    // 如果还没到达目标位置，继续下落
+                    if (currentPos.y() < targetYPos) {
+                        // 计算新位置（带加速度的下落效果）
+                        double newY = currentPos.y() + 2 + (currentPos.y() - startY) * 0.01;
+
+                        // 更新实体位置
+                        Position newPos = new Position(currentPos.x(), newY);
+                        sun.setPosition(newPos);
+
+                        // 更新视图位置
+                        visual.setCenterY(newY);
+                    } else {
+                        // 到达目标位置后，开始轻微晃动
+                        double wiggleAmount = Math.sin(System.currentTimeMillis() * 0.01) * 3;
+                        visual.setCenterY(targetYPos + wiggleAmount);
+                    }
+                })
+        );
+        timeline.setCycleCount(Timeline.INDEFINITE);
+        timeline.play();
 
         // 阳光自动消失的定时器
         new Thread(() -> {
@@ -641,16 +755,18 @@ public class BattleScene extends Scene {
     /**
      * 收集阳光
      */
-    private void collectSun(Sun sun, Circle sunVisual) {
+    private void collectSun(Sun sun, Circle sunVisual, Map<Sun, Double> sunTargetPositions) {
         sun.collect();
         sunBankService.addSun(sun.getValue());
         sunAmountText.setText("阳光: " + sunBankService.getSunAmount());
         battleStatusText.setText("获得阳光 +" + sun.getValue());
-        System.out.println("阳光被收集，当前阳光数量: " + sunBankService.getSunAmount()); // 添加调试信息
+        System.out.println("阳光被收集，当前阳光数量: " + sunBankService.getSunAmount());
 
         // 从UI中移除阳光
         sunLayer.getChildren().remove(sunVisual);
         activeSuns.remove(sun);
+        fallingSuns.remove(sun);
+        sunTargetPositions.remove(sun);
     }
     /**
      * 设置UI更新循环
@@ -693,12 +809,18 @@ public class BattleScene extends Scene {
                 // 根据僵尸类型的移动速度更新位置
                 double speed = getZombieSpeed(zombie.getType());
                 double newX = currentX - speed;
-                
+                // 检查是否有植物阻挡
+                if (hasPlantBlocking(zombie, newX)) {
+                    // 如果有植物阻挡，就不更新位置
+                    newX = currentX;
+                }
                 // 更新容器位置
                 container.setLayoutX(newX);
 
+
                 // 更新僵尸实体位置 - 移除Y轴偏移量，确保实体位置与渲染位置一致
                 zombie.setPosition(new Position(newX, container.getLayoutY()));
+
 
                 // 检查僵尸是否移出屏幕左侧
                 if (newX + container.getPrefWidth() < 0) {
@@ -742,7 +864,9 @@ public class BattleScene extends Scene {
                     }
 
                     // 检查小推车是否移动到屏幕右侧，移出屏幕则消失
+
                     if (newX > 984) {
+
                         System.out.println("小推车移出屏幕！");
                         zombieLayer.getChildren().remove(cartView);
                         cartViews.remove(cart.getLaneIndex());
@@ -773,12 +897,6 @@ public class BattleScene extends Scene {
                         // 为了简化，这里只是打印一条消息
                         System.out.println("小推车被触发！车道：" + laneIndex);
 
-//                        // 从视图中移除小推车
-//                        Region cartView = cartViews.get(laneIndex);
-//                        if (cartView != null) {
-//                            zombieLayer.getChildren().remove(cartView);
-//                            cartViews.remove(laneIndex);
-//                        }
                     }
                 }
             }
@@ -788,7 +906,48 @@ public class BattleScene extends Scene {
             removeZombie(zombieId);
         }
     }
-    
+    /**
+     * 检查是否有植物阻挡了僵尸
+     */
+    private boolean hasPlantBlocking(Zombie zombie, double newX) {
+        // 获取僵尸所在车道
+        int laneIndex = zombie.getLaneIndex();
+        //double zombieY = zombie.getPosition().y();
+
+        // 遍历所有植物，检查是否在相同车道且阻挡了僵尸
+        for (Plant plant : plants) {
+            Position plantPos = plant.getPosition();
+
+            // 计算植物所在的车道（根据Y坐标）
+            int plantLane = (int)(plantPos.y() / (80 + 2));
+
+            // 检查是否在同一车道
+            if (plantLane == laneIndex) {
+                // 获取植物实体的X坐标（绝对坐标）
+                double plantX = plantPos.x();
+                // 植物宽度约为70，僵尸宽度约为70
+                // 计算植物的右边缘位置
+                double plantRightEdge = plantX + 70;
+                // 计算僵尸的左边缘位置（新位置）
+                double zombieLeftEdge = newX;
+
+                // 当僵尸的左边缘接近植物的右边缘时进行阻挡
+                // 这里使用5像素的触发距离，使碰撞检测更灵敏
+                if (zombieLeftEdge <= plantRightEdge + 75 && zombieLeftEdge > plantRightEdge - 5) {
+                    // 将僵尸位置调整到植物右边缘前方约5像素的位置
+                    Pane container = zombieContainers.get(zombie.getId());
+                    if (container != null) {
+                        // 设置僵尸刚好在植物右边缘前方
+                        container.setLayoutX(plantRightEdge + 5);
+                        zombie.setPosition(new Position(plantRightEdge + 5, container.getLayoutY()));
+                    }
+                    return true;
+                }
+            }
+        }
+
+        return false;
+    }
     /**
      * 获取僵尸的移动速度
      */
@@ -836,7 +995,7 @@ public class BattleScene extends Scene {
             if (plant.produceSun(now)) {
                 System.out.println("向日葵生产阳光！位置: " + plant.getPosition().x() + ", " + plant.getPosition().y());
                 // 向日葵生产了阳光，在植物位置上方生成阳光
-                spawnSunAtPosition(plant.getPosition().x(), plant.getPosition().y() - 20);
+                spawnSunAtPosition(plant.getPosition().x() + 150, plant.getPosition().y());
             }
 
             // 处理植物攻击
@@ -860,7 +1019,6 @@ public class BattleScene extends Scene {
     private void spawnSunAtPosition(double x, double y) {
         int sunValue = 25; // 阳光价值
         Position position = new Position(x, y);
-
         // 创建阳光实体
         Sun sun = new Sun(position, sunValue);
         activeSuns.add(sun);
@@ -874,7 +1032,7 @@ public class BattleScene extends Scene {
         // 添加点击事件
         sunVisual.setOnMouseClicked(e -> {
             if (!sun.isCollected()) {
-                collectSun(sun, sunVisual);
+                collectSun(sun, sunVisual, sunTargetPositions);
             }
         });
 
@@ -906,19 +1064,21 @@ public class BattleScene extends Scene {
         projectileView.setPrefSize(15, 15);
         projectileView.setStyle(getProjectileStyleByType(projectile.getType()));
 
-        // 设置子弹初始位置 - 使用与植物相同的车道高度计算方式(82)
-        double x = projectile.getPosition().x(); // 直接使用子弹实体的X坐标
-        double y = projectile.getLaneIndex() * 82 + 5 + 15;
-        
-        // 同步子弹实体的Y坐标与渲染位置
-        Position newPosition = new Position(x, y - 15); // 减去子弹居中偏移
+
+        // 设置子弹初始位置 - 从植物右侧边缘发射（植物X坐标+70像素）
+        double plantX = projectile.getPosition().x();
+        double adjustedX = plantX + 50; // 从植物右侧边缘发射
+        double y = projectile.getLaneIndex() * 82 + 5+15;
+
+        // 同步子弹实体的位置
+        Position newPosition = new Position(adjustedX, y - 15);
         projectile.setPosition(newPosition);
 
-        projectileView.setLayoutX(x);
+        projectileView.setLayoutX(adjustedX);
         projectileView.setLayoutY(y);
 
         // 添加调试日志，确认子弹被渲染
-        System.out.println("渲染子弹: 类型=" + projectile.getType() + ", 位置=(" + x + ", " + y + "), 车道=" + projectile.getLaneIndex());
+        System.out.println("渲染子弹: 类型=" + projectile.getType() + ", 位置=(" + adjustedX + ", " + y + "), 车道=" + projectile.getLaneIndex());
 
         // 保存子弹视图
         projectileViews.put(projectile, projectileView);
@@ -953,12 +1113,14 @@ public class BattleScene extends Scene {
             if (view != null) {
                 // 使用Projectile类的updatePosition方法更新子弹位置
                 projectile.updatePosition(16); // 假设每帧16ms
+
                 
                 // 更新子弹视图位置 - 直接使用实体位置
                 view.setLayoutX(projectile.getPosition().x());
 
                 // 检查是否超出屏幕
                 if (projectile.getPosition().x() > 1200) {
+
                     projectilesToRemove.add(projectile);
                     continue;
                 }
@@ -983,6 +1145,7 @@ public class BattleScene extends Scene {
         
         // 遍历所有僵尸，检查碰撞
         for (Zombie zombie : zombies) {
+
             // 确保在同一车道
             if (zombie.getLaneIndex() != projectile.getLaneIndex()) {
                 continue;
@@ -999,6 +1162,7 @@ public class BattleScene extends Scene {
             boolean collision = (distance <= 20); // 稍大于子弹半径，留出一点误差余量
 
             if (collision) {
+
                 // 对僵尸造成伤害
                 zombie.takeDamage(projectile.getDamage());
                 
@@ -1047,4 +1211,49 @@ public class BattleScene extends Scene {
         // 保存小推车视图引用
         cartViews.put(laneIndex, cartView);
     }
+    /**
+     * 铲除植物
+     */
+    private void removePlant(int row, int col) {
+        // 获取对应的单元格
+        String cellKey = row + "," + col;
+        Pane cell = plantCells.get(cellKey);
+
+        // 检查单元格是否有植物
+        if (cell.getChildren().size() > 0) {
+            // 计算植物位置 - 使用与placePlant相同的计算方式
+            Position plantPosition = new Position(col * (80 + 2) + 5, row * (80 + 2) + 5);
+
+            // 查找并移除对应的植物实体
+            Plant plantToRemove = null;
+            for (Plant plant : plants) {
+                if (Math.abs(plant.getPosition().x() - plantPosition.x()) < 10 &&
+                        Math.abs(plant.getPosition().y() - plantPosition.y()) < 10) {
+                    plantToRemove = plant;
+                    break;
+                }
+            }
+
+            if (plantToRemove != null) {
+                // 从列表中移除植物
+                plants.remove(plantToRemove);
+
+                // 从UI中移除植物视图
+                cell.getChildren().clear();
+
+                battleStatusText.setText("已铲除植物");
+
+                // 返回部分阳光（例如返还一半的阳光成本）
+                int refund = plantToRemove.getType().getCost() / 2;
+                sunBankService.addSun(refund);
+                sunAmountText.setText("阳光: " + sunBankService.getSunAmount());
+                // 铲除成功后自动退出铲子模式
+                isShovelMode = false;
+                shovelButton.setStyle("-fx-background-color: #6c757d; -fx-text-fill: white;");
+            }
+        } else {
+            battleStatusText.setText("该位置没有植物！");
+        }
+    }
+
 }

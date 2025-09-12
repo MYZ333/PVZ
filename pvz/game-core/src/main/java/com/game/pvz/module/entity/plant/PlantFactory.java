@@ -26,7 +26,7 @@ public class PlantFactory {
         // 根据植物类型设置不同的初始血量
         int maxHealth = switch (type) {
             case WALLNUT -> 500;
-            case SUNFLOWER, PEASHOOTER, REPEATER -> 100;
+            case SUNFLOWER, PEASHOOTER, REPEATER -> 1;
             case CHERRY_BOMB -> 5000;
             default -> 50;
         };
