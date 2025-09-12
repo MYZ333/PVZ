@@ -113,7 +113,9 @@ public class BattleScene extends Scene {
         // 创建主布局容器
         VBox mainLayout = new VBox(10);
         mainLayout.setPadding(new Insets(10));
+
         mainLayout.setPrefSize(1200, 700);
+
         
         // 顶部信息栏
         HBox topBar = new HBox(20);
@@ -142,7 +144,7 @@ public class BattleScene extends Scene {
         gameGrid = new GridPane();
         gameGrid.setHgap(2);
         gameGrid.setVgap(2);
-        gameGrid.setAlignment(Pos.TOP_LEFT);
+     gameGrid.setAlignment(Pos.TOP_LEFT);
         gameGrid.setStyle("-fx-background-color: #283618;");
         
         // 创建5x12的游戏网格（5行12列）
@@ -150,6 +152,8 @@ public class BattleScene extends Scene {
             for (int col = 0; col < 12; col++) {
                 Pane cell = new Pane();
                 cell.setPrefSize(80, 80);
+
+
                 cell.setStyle("-fx-background-color: #3d5a14; -fx-border-color: #606c38; -fx-border-width: 1;");
                 
                 // 保存行列信息到单元格
@@ -163,27 +167,35 @@ public class BattleScene extends Scene {
         }
         // 创建阳光层，用于显示阳光
         sunLayer = new Pane();
+
         sunLayer.setPrefSize(984, 500); // 明确设置与gameContainer相同的大小
+
         sunLayer.setMouseTransparent(false); // 允许阳光接收点击事件
         // 确保阳光层的背景是透明的，不会遮挡下层内容
         sunLayer.setStyle("-fx-background-color: transparent;");
 
         // 僵尸层，用于专门放置僵尸
         zombieLayer = new Pane();
+
         zombieLayer.setPrefSize(984, 500);
-        zombieLayer.setMouseTransparent(false);
+
+       zombieLayer.setMouseTransparent(false);
 
         // 创建子弹层，用于显示子弹
         projectileLayer = new Pane();
+ feature-zhangbo
         projectileLayer.setPrefSize(984, 500);
+
         projectileLayer.setMouseTransparent(true);
 
         // 创建并放置小推车（在每个车道的最左侧） - 移到这里，确保zombieLayer已经初始化
         for (int laneIndex = 0; laneIndex < 5; laneIndex++) {
             // 计算小推车的位置（车道最左侧）
+
             // 从代码中可以看出，每个车道的Y坐标计算方式为：laneIndex * 82 + 5
             // 最左侧的X坐标为10
             Position cartPosition = new Position(10, laneIndex * 82 + 5);
+
 
             // 创建小推车实体
             Cart cart = CartFactory.getInstance().createDefaultCart(cartPosition, laneIndex);
@@ -194,6 +206,7 @@ public class BattleScene extends Scene {
         }
         // 创建一个容器来包裹游戏网格、僵尸层和阳光层
         gameContainer = new StackPane();
+
         gameContainer.setPrefSize(984, 500); // 设置适当的大小 (12列 x (80+2)像素)
         // 设置StackPane的对齐方式为左上角，确保gameGrid从(0,0)开始
         gameContainer.setAlignment(Pos.TOP_LEFT);
@@ -207,6 +220,7 @@ public class BattleScene extends Scene {
         offsetContainer.getChildren().add(gameGrid);
         
         gameContainer.getChildren().add(offsetContainer); // 第一层：带有偏移的游戏网格
+
         gameContainer.getChildren().add(zombieLayer); // 第二层：僵尸层
         gameContainer.getChildren().add(projectileLayer); // 第三层：子弹层
         gameContainer.getChildren().add(sunLayer); // 第四层：阳光层（在最上层，确保可以点击）
@@ -216,12 +230,14 @@ public class BattleScene extends Scene {
             // 计算点击位置对应的网格坐标
             double x = e.getX();
             double y = e.getY();
+
             // 考虑网格间隔和水平偏移量（减去82像素的偏移）
             int row = (int)Math.floor(y / (80 + 2));
             int col = (int)Math.floor((x - 82) / (80 + 2));
 
             // 检查点击位置是否在有效网格内
             if (battleStarted && selectedPlantType != null && row >= 0 && row < 5 && col >= 0 && col < 12) {
+
                 placePlant(selectedPlantType, row, col);
             }
         });
@@ -352,6 +368,7 @@ public class BattleScene extends Scene {
             zombies.add(testZombie);
             renderZombie(testZombie, 1);
             System.out.println("测试僵尸已添加到场景");
+
 
             System.out.println("开始关卡 " + level + " 的战斗！");
         }
@@ -501,8 +518,10 @@ public class BattleScene extends Scene {
             System.out.println("渲染僵尸: " + zombie.getType() + " 在车道 " + laneIndex);
             
             // 设置僵尸初始位置（从右侧进入）
+
             double x = 984; // 使用固定值，确保从屏幕右侧进入
             double y = laneIndex *82 + 5;  // 放置在对应车道
+
             
             // 创建僵尸视图容器
             Pane zombieContainer = new Pane();
@@ -597,8 +616,10 @@ public class BattleScene extends Scene {
     private void spawnSun() {
         // 随机生成阳光的位置（确保在可见区域内）
         int sunValue = 25; // 阳光价值
+
         int x = 30 + random.nextInt(924); // 随机X坐标 (确保在984宽度内)
         int y = 30 + random.nextInt(440); // 随机Y坐标 (确保在500高度内)
+
         Position position = new Position(x, y);
 
         // 创建阳光实体
@@ -697,8 +718,10 @@ public class BattleScene extends Scene {
                 // 更新容器位置
                 container.setLayoutX(newX);
 
+
                 // 更新僵尸实体位置 - 移除Y轴偏移量，确保实体位置与渲染位置一致
                 zombie.setPosition(new Position(newX, container.getLayoutY()));
+
 
                 // 检查僵尸是否移出屏幕左侧
                 if (newX + container.getPrefWidth() < 0) {
@@ -742,7 +765,9 @@ public class BattleScene extends Scene {
                     }
 
                     // 检查小推车是否移动到屏幕右侧，移出屏幕则消失
+
                     if (newX > 984) {
+
                         System.out.println("小推车移出屏幕！");
                         zombieLayer.getChildren().remove(cartView);
                         cartViews.remove(cart.getLaneIndex());
@@ -906,6 +931,7 @@ public class BattleScene extends Scene {
         projectileView.setPrefSize(15, 15);
         projectileView.setStyle(getProjectileStyleByType(projectile.getType()));
 
+
         // 设置子弹初始位置 - 使用与植物相同的车道高度计算方式(82)
         double x = projectile.getPosition().x(); // 直接使用子弹实体的X坐标
         double y = projectile.getLaneIndex() * 82 + 5 + 15;
@@ -913,6 +939,7 @@ public class BattleScene extends Scene {
         // 同步子弹实体的Y坐标与渲染位置
         Position newPosition = new Position(x, y - 15); // 减去子弹居中偏移
         projectile.setPosition(newPosition);
+
 
         projectileView.setLayoutX(x);
         projectileView.setLayoutY(y);
@@ -953,12 +980,14 @@ public class BattleScene extends Scene {
             if (view != null) {
                 // 使用Projectile类的updatePosition方法更新子弹位置
                 projectile.updatePosition(16); // 假设每帧16ms
+
                 
                 // 更新子弹视图位置 - 直接使用实体位置
                 view.setLayoutX(projectile.getPosition().x());
 
                 // 检查是否超出屏幕
                 if (projectile.getPosition().x() > 1200) {
+
                     projectilesToRemove.add(projectile);
                     continue;
                 }
@@ -983,6 +1012,7 @@ public class BattleScene extends Scene {
         
         // 遍历所有僵尸，检查碰撞
         for (Zombie zombie : zombies) {
+
             // 确保在同一车道
             if (zombie.getLaneIndex() != projectile.getLaneIndex()) {
                 continue;
@@ -999,6 +1029,7 @@ public class BattleScene extends Scene {
             boolean collision = (distance <= 20); // 稍大于子弹半径，留出一点误差余量
 
             if (collision) {
+
                 // 对僵尸造成伤害
                 zombie.takeDamage(projectile.getDamage());
                 
