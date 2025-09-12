@@ -26,8 +26,8 @@ public class Router {
     public void initialize(Stage primaryStage) {
         this.primaryStage = primaryStage;
         this.primaryStage.setTitle("植物大战僵尸");
-        this.primaryStage.setWidth(800);
-        this.primaryStage.setHeight(700);
+        this.primaryStage.setWidth(1200);
+        this.primaryStage.setHeight(900);
         this.primaryStage.setResizable(false);
         
         // 默认显示主菜单场景
