@@ -158,7 +158,7 @@ public class BattleScene extends Scene {
         gameGrid.setHgap(2);
         gameGrid.setVgap(2);
      gameGrid.setAlignment(Pos.TOP_LEFT);
-       // gameGrid.setStyle("-fx-background-color: #283618;");
+
         
         // 创建5x12的游戏网格（5行12列）
         for (int row = 0; row < 5; row++) {
@@ -167,8 +167,10 @@ public class BattleScene extends Scene {
                 cell.setPrefSize(80, 80);
 
 
+
                 // 设置网格为完全透明，无边框
                 cell.setStyle("-fx-background-color: transparent; -fx-border-color: transparent; -fx-border-width: 0;");
+
                 
                 // 保存行列信息到单元格
                 final int finalRow = row;
