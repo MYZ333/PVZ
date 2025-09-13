@@ -54,7 +54,7 @@ import javafx.util.Duration;
 public class BattleScene extends Scene {
     
     private int level;
-    private boolean battleStarted = false;
+    private volatile boolean battleStarted = false;
     private GameLoopService gameLoopService;
     private SunBankService sunBankService;
     private GridPane gameGrid; // 游戏棋盘
@@ -152,7 +152,7 @@ public class BattleScene extends Scene {
         gameGrid = new GridPane();
         gameGrid.setHgap(2);
         gameGrid.setVgap(2);
-     gameGrid.setAlignment(Pos.TOP_LEFT);
+        gameGrid.setAlignment(Pos.TOP_LEFT);
         gameGrid.setStyle("-fx-background-color: #283618;");
         
         // 创建5x12的游戏网格（5行12列）
@@ -187,15 +187,10 @@ public class BattleScene extends Scene {
 
         zombieLayer.setPrefSize(984, 500);
 
-<<<<<<< HEAD
         zombieLayer.setMouseTransparent(false);
-=======
-       zombieLayer.setMouseTransparent(false);
->>>>>>> b8ae836c41077473082bb69b7bf156d0449522f4
 
         // 创建子弹层，用于显示子弹
         projectileLayer = new Pane();
- feature-zhangbo
         projectileLayer.setPrefSize(984, 500);
 
         projectileLayer.setMouseTransparent(true);
@@ -207,7 +202,6 @@ public class BattleScene extends Scene {
             // 从代码中可以看出，每个车道的Y坐标计算方式为：laneIndex * 82 + 5
             // 最左侧的X坐标为10
             Position cartPosition = new Position(10, laneIndex * 82 + 5+40);
-
 
 
             // 创建小推车实体
@@ -249,7 +243,6 @@ public class BattleScene extends Scene {
             int col = (int)Math.floor((x - 82) / (80 + 2));
 
             // 检查点击位置是否在有效网格内
-<<<<<<< HEAD
             if (battleStarted && row >= 0 && row < 5 && col >= 0 && col < 12) {
                 if (isShovelMode) {
                     // 铲子模式下，尝试铲除植物
@@ -258,11 +251,6 @@ public class BattleScene extends Scene {
                     // 普通模式下，尝试放置植物
                     placePlant(selectedPlantType, row, col);
                 }
-=======
-            if (battleStarted && selectedPlantType != null && row >= 0 && row < 5 && col >= 0 && col < 12) {
-
-                placePlant(selectedPlantType, row, col);
->>>>>>> b8ae836c41077473082bb69b7bf156d0449522f4
             }
         });
 
@@ -684,14 +672,8 @@ public class BattleScene extends Scene {
         int sunValue = 25; // 阳光价值
 
         int x = 30 + random.nextInt(924); // 随机X坐标 (确保在984宽度内)
-<<<<<<< HEAD
         int startY = -30; // 从屏幕顶部外开始
         int targetY = 30 + random.nextInt(400); // 目标Y坐标 (确保在500高度内)
-=======
-        int y = 30 + random.nextInt(440); // 随机Y坐标 (确保在500高度内)
-
-        Position position = new Position(x, y);
->>>>>>> b8ae836c41077473082bb69b7bf156d0449522f4
 
         //Position position = new Position(x, y);
 
@@ -842,7 +824,10 @@ public class BattleScene extends Scene {
 
                 // 检查僵尸是否移出屏幕左侧
                 if (newX + container.getPrefWidth() < 0) {
-                    zombiesToRemove.add(zombieId);
+                    System.out.println("僵尸走出左侧窗口，游戏失败！");
+                    battleStatusText.setText("游戏失败！僵尸已经进入屋子！");
+                    stopBattle();
+                    return; // 立即退出方法，不再处理其他僵尸
                 }
             }
         }
@@ -1083,7 +1068,6 @@ public class BattleScene extends Scene {
         projectileView.setStyle(getProjectileStyleByType(projectile.getType()));
 
 
-<<<<<<< HEAD
         // 设置子弹初始位置 - 从植物右侧边缘发射（植物X坐标+70像素）
         double plantX = projectile.getPosition().x();
         double adjustedX = plantX + 50; // 从植物右侧边缘发射
@@ -1094,18 +1078,6 @@ public class BattleScene extends Scene {
         projectile.setPosition(newPosition);
 
         projectileView.setLayoutX(adjustedX);
-=======
-        // 设置子弹初始位置 - 使用与植物相同的车道高度计算方式(82)
-        double x = projectile.getPosition().x(); // 直接使用子弹实体的X坐标
-        double y = projectile.getLaneIndex() * 82 + 5 + 15;
-        
-        // 同步子弹实体的Y坐标与渲染位置
-        Position newPosition = new Position(x, y - 15); // 减去子弹居中偏移
-        projectile.setPosition(newPosition);
-
-
-        projectileView.setLayoutX(x);
->>>>>>> b8ae836c41077473082bb69b7bf156d0449522f4
         projectileView.setLayoutY(y);
 
         // 添加调试日志，确认子弹被渲染
