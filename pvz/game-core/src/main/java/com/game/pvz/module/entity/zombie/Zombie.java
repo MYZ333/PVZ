@@ -136,8 +136,8 @@ public class Zombie implements GameObject {
             return;
         }
         
-        // 使用getActualSpeed()而不是getSpeed()，考虑状态加成
-        double distanceToMove = (getActualSpeed() * deltaTime) / 1000.0;
+        // 根据僵尸速度计算移动距离
+        double distanceToMove = (getSpeed() * deltaTime) / 1000.0;
         
         // 僵尸向左移动（X坐标减小）
         Position newPosition = new Position(position.x() - distanceToMove, position.y());
@@ -153,10 +153,10 @@ public class Zombie implements GameObject {
         double detectionRange = 50; // 检测范围（像素）
         
         return plants.stream()
-                .filter(plant -> plant.getLaneIndex() == laneIndex) // 确保在同一车道
-                .filter(plant -> !plant.isDead()) // 只考虑存活的植物
-                .filter(plant -> plant.getPosition().x() <= position.x() + detectionRange) // 在检测范围内
-                .filter(plant -> plant.getPosition().x() >= 0) // 植物在屏幕内
+                .filter(plant -> plant.getLaneIndex() == laneIndex)
+                .filter(plant -> !plant.isDead())
+                .filter(plant -> plant.getPosition().x() <= position.x() + detectionRange)
+                .filter(plant -> plant.getPosition().x() >= position.x() - position.x() / 2) // 只检测前方
                 .min((p1, p2) -> Double.compare(p2.getPosition().x(), p1.getPosition().x())) // 找到最右边的植物
                 .orElse(null);
     }
@@ -173,26 +173,14 @@ public class Zombie implements GameObject {
             return;
         }
         
-        // 确保植物在攻击范围内 - 扩大攻击范围，使僵尸更容易攻击到植物
-        double plantRightEdge = plant.getPosition().x() + 70; // 假设植物宽度为70
-        if (position.x() >= plantRightEdge - 20) { // 从-5增加到-20，扩大攻击范围
-            // 对植物造成伤害
-            plant.takeDamage(type.getDamage());
-            
-            // 调试输出，验证伤害是否正确施加
-            System.out.println("僵尸攻击植物: " + type.name() + " 造成 " + type.getDamage() + " 点伤害，植物剩余血量: " + plant.getHealth().current());
-            
-            lastAttackTime = currentTime;
-            
-            // 如果植物死亡，停止攻击
-            if (plant.isDead()) {
-                System.out.println("植物已被吃掉: " + plant.getType().name());
-                isEating = false;
-                targetPlant = null;
-            }
-        } else {
-            // 调试输出，显示为什么没有攻击
-            System.out.println("僵尸未进入攻击范围: 僵尸X=" + position.x() + ", 植物右边缘-20=" + (plantRightEdge - 20));
+        // 对植物造成伤害
+        plant.takeDamage(type.getDamage());
+        lastAttackTime = currentTime;
+        
+        // 如果植物死亡，停止攻击
+        if (plant.isDead()) {
+            isEating = false;
+            targetPlant = null;
         }
     }
     
@@ -278,20 +266,15 @@ public class Zombie implements GameObject {
             isEating = true;
             targetPlant = frontPlant;
             attackPlant(currentTime, frontPlant);
-            // 当有植物时不移动
-            return;
         } else {
             // 前方没有植物，继续移动
             isEating = false;
             targetPlant = null;
-            // 使用当前时间差计算移动距离
-            long deltaTime = currentTime - lastAttackTime;
-            // 限制最大时间差，避免瞬间移动
-            deltaTime = Math.min(33, deltaTime); // 最多33ms，约30FPS
-            move(deltaTime);
+            move(currentTime - lastAttackTime);
         }
         
-        // 移除这行代码，不再重置lastAttackTime，以保证攻击冷却机制正常工作
+        // 更新上次更新时间
+        lastAttackTime = currentTime;
     }
     
     /**
