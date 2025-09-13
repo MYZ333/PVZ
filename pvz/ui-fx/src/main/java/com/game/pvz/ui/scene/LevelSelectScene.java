@@ -36,7 +36,7 @@ public class LevelSelectScene extends Scene {
     private ImageView backButtonView;
     // 返回按钮图片的放大倍数
     private double backButtonImageScale = 2.4; // 默认不放大
-    
+
     public LevelSelectScene() {
         super(new Pane());
         initialize();
@@ -86,7 +86,7 @@ public class LevelSelectScene extends Scene {
             Button levelButton = createLevelButton(i);
             int colIndex;
             int rowIndex;
-            
+
             // 对于关卡1，使用自定义的行列索引位置（代码可控）
             if (i == 1) {
                 colIndex = level1ColIndex;
@@ -96,11 +96,11 @@ public class LevelSelectScene extends Scene {
                 colIndex = (i - 1) % 3;
                 rowIndex = (i - 1) / 3;
             }
-            
+
             // 直接将按钮添加到网格中，不再使用额外的容器
             levelGrid.add(levelButton, colIndex, rowIndex);
         }
-        
+
         // 添加返回主菜单按钮 - 放置在左下角
         Button backButton = new Button("");
         // 设置按钮大小以适应放大后的图片
@@ -109,7 +109,7 @@ public class LevelSelectScene extends Scene {
         backButton.setLayoutY(730); // 左下角Y坐标
         backButton.setBackground(Background.EMPTY);
         backButton.setBorder(Border.EMPTY);
-        
+
         // 创建返回按钮的图片视图
         Image backButtonImage = ResourcePool.getInstance().getImage("/pic/ret.png");
         if (backButtonImage != null) {
@@ -121,7 +121,7 @@ public class LevelSelectScene extends Scene {
             this.backButtonView.setVisible(true); // 初始状态下显示默认图片
             backButton.setGraphic(this.backButtonView);
         }
-        
+
         // 鼠标停放时显示高亮图片
         backButton.setOnMouseEntered(e -> {
             if (this.backButtonView != null) {
@@ -131,7 +131,7 @@ public class LevelSelectScene extends Scene {
                 }
             }
         });
-        
+
         // 鼠标离开时恢复默认图片
         backButton.setOnMouseExited(e -> {
             if (this.backButtonView != null) {
@@ -141,12 +141,12 @@ public class LevelSelectScene extends Scene {
                 }
             }
         });
-        
+
         // 鼠标按下时没有反应（不移动位置）
         backButton.setOnMousePressed(e -> {
             // 按下时不做任何移动处理
         });
-        
+
         backButton.setOnAction(e -> {
             Router.getInstance().showMenuScene();
         });
@@ -161,40 +161,40 @@ public class LevelSelectScene extends Scene {
     private Button createLevelButton(int levelNumber) {
         // 创建一个空文本的按钮
         Button button = new Button("");
-        
+
         // 根据关卡编号加载对应的图片
         String imagePath = String.format("/pic/guanqia%d.png", levelNumber);
         Image levelImage = ResourcePool.getInstance().getImage(imagePath);
-        
+
         if (levelImage != null) {
             // 创建图片视图
             ImageView imageView = new ImageView(levelImage);
             // 保存图片视图到数组中
             levelButtonViews[levelNumber - 1] = imageView;
-            
+
             // 设置图片大小（使用原始大小乘以放大倍数）
             double scaledWidth = originalButtonWidth * levelButtonImageScales[levelNumber - 1];
             double scaledHeight = originalButtonHeight * levelButtonImageScales[levelNumber - 1];
             imageView.setFitWidth(scaledWidth);
             imageView.setFitHeight(scaledHeight);
             imageView.setPreserveRatio(true);
-            
+
             // 设置按钮大小以适应放大后的图片
             button.setPrefSize(scaledWidth, scaledHeight);
-            
+
             // 使用setGraphic方法将图片设置为按钮的图形内容
             // 这样点击图片就等同于点击按钮
             button.setGraphic(imageView);
-            
+
             // 为所有关卡添加鼠标悬停和点击效果
             // 加载对应关卡的高亮图片
             String highlightImagePath = String.format("/pic/guanqia%dliang.png", levelNumber);
             Image highlightImage = ResourcePool.getInstance().getImage(highlightImagePath);
-            
+
             if (highlightImage != null) {
                 // 保存当前关卡索引，避免闭包问题
                 final int currentLevelIndex = levelNumber - 1;
-                
+
                 // 鼠标悬停时切换到高亮图片
                 button.setOnMouseEntered(e -> {
                     imageView.setImage(highlightImage);
@@ -203,7 +203,7 @@ public class LevelSelectScene extends Scene {
                     imageView.setFitWidth(originalButtonWidth * highlightedScale);
                     imageView.setFitHeight(originalButtonHeight * highlightedScale);
                 });
-                
+
                 // 鼠标离开时切换回原图
                 button.setOnMouseExited(e -> {
                     imageView.setImage(levelImage);
@@ -212,12 +212,12 @@ public class LevelSelectScene extends Scene {
                     imageView.setFitHeight(originalButtonHeight * levelButtonImageScales[currentLevelIndex]);
                 });
             }
-            
+
             // 鼠标按下时图片向下移动3px
             button.setOnMousePressed(e -> {
                 imageView.setTranslateY(3);
             });
-            
+
             // 鼠标释放时恢复位置
             button.setOnMouseReleased(e -> {
                 imageView.setTranslateY(0);
@@ -229,7 +229,7 @@ public class LevelSelectScene extends Scene {
             button.setText("关卡 " + levelNumber);
             button.setFont(Font.font("Arial", FontWeight.NORMAL, 16));
         }
-        
+
         // 设置按钮样式为透明，不显示边框和背景
         button.setBackground(Background.EMPTY);
         button.setBorder(Border.EMPTY);

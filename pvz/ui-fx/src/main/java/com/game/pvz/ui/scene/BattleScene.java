@@ -179,7 +179,7 @@ public class BattleScene extends Scene {
                 // 设置网格为完全透明，无边框
                 cell.setStyle("-fx-background-color: transparent; -fx-border-color: transparent; -fx-border-width: 0;");
 
-                
+
                 // 保存行列信息到单元格
                 final int finalRow = row;
                 final int finalCol = col;
@@ -468,6 +468,11 @@ public class BattleScene extends Scene {
             Plant plant = PlantFactory.getInstance().createPlant(type, position);
             plants.add(plant);
             
+            // 为樱桃炸弹设置种植时间
+            if (type == PlantType.CHERRY_BOMB) {
+                plant.setPlantedTime(System.currentTimeMillis());
+            }
+
             // 渲染植物（用方块代表）
             renderPlant(plant, cell, type);
             
@@ -799,7 +804,7 @@ public class BattleScene extends Scene {
                     updateZombies();
 
                     // 植物攻击逻辑
-                    long currentTimeMillis = now / 1_000_000;
+                    long currentTimeMillis = System.currentTimeMillis();
                     updatePlants(currentTimeMillis);
 
                     // 更新子弹位置
@@ -816,10 +821,19 @@ public class BattleScene extends Scene {
     private void updateZombies() {
         List<UUID> zombiesToRemove = new ArrayList<>();
         
+        // 获取当前时间（毫秒）
+        long currentTime = System.currentTimeMillis();
+
         for (Zombie zombie : zombies) {
             UUID zombieId = zombie.getId();
             Pane container = zombieContainers.get(zombieId);
             
+            // 检查僵尸是否已经死亡
+            if (zombie.isDead()) {
+                zombiesToRemove.add(zombieId);
+                continue;
+            }
+
             if (container != null) {
                 // 获取当前位置
                 double currentX = container.getLayoutX();
@@ -831,6 +845,12 @@ public class BattleScene extends Scene {
                 if (hasPlantBlocking(zombie, newX)) {
                     // 如果有植物阻挡，就不更新位置
                     newX = currentX;
+
+                    // 尝试攻击前方的植物
+                    Plant frontPlant = zombie.checkForPlantsAhead(plants);
+                    if (frontPlant != null && !frontPlant.isDead()) {
+                        zombie.attackPlant(currentTime, frontPlant);
+                    }
                 }
                 // 更新容器位置
                 container.setLayoutX(newX);
@@ -978,15 +998,15 @@ public class BattleScene extends Scene {
         // 根据僵尸类型设置不同的移动速度
         switch (type) {
             case NORMAL:
-                return 0.5;
+                return 0.15;
             case FLAG:
-                return 0.7;
+                return 0.16;
             case BUCKETHEAD:
-                return 0.4;
+                return 0.1;
             case FOOTBALL:
-                return 0.6;
+                return 0.22;
             default:
-                return 0.5;
+                return 0.15;
         }
     }
     
@@ -1009,16 +1029,33 @@ public class BattleScene extends Scene {
     // 添加新方法：更新植物状态和处理攻击
     private void updatePlants(long now) {
         //System.out.println("updatePlants called with time: " + now + " ms");
+
+        // 创建一个列表来存储需要移除的植物
+        List<Plant> plantsToRemove = new ArrayList<>();
+
         // 遍历所有植物
         for (Plant plant : plants) {
             // 添加植物位置日志
             System.out.println("植物位置: " + plant.getPosition().x() + ", " + plant.getPosition().y() + ", 类型: " + plant.getType());
 
+            // 检查樱桃炸弹是否需要爆炸
+            if (plant.getType() == PlantType.CHERRY_BOMB) {
+                // 直接使用已转换为毫秒的时间戳，不再重复转换
+                System.out.println("调用checkAndExplodeIfNeeded - 传入时间: " + now + ", plantedTime: " + plant.getPlantedTime());
+                plant.checkAndExplodeIfNeeded(now, zombies);
+            }
+
             // 处理向日葵生产阳光
             if (plant.produceSun(now)) {
                 System.out.println("向日葵生产阳光！位置: " + plant.getPosition().x() + ", " + plant.getPosition().y());
                 // 向日葵生产了阳光，在植物位置上方生成阳光
-                spawnSunAtPosition(plant.getPosition().x() + 150, plant.getPosition().y());
+                spawnSunAtPosition(plant.getPosition().x()+150, plant.getPosition().y());
+            }
+
+            // 检查植物是否死亡
+            if (plant.isDead()) {
+                plantsToRemove.add(plant);
+                continue; // 跳过已死亡植物的其他处理
             }
 
             // 处理植物攻击
@@ -1035,6 +1072,25 @@ public class BattleScene extends Scene {
             else {
                 System.out.println("没有生成子弹");
             }
+        }
+
+        // 移除死亡的植物
+        for (Plant deadPlant : plantsToRemove) {
+            plants.remove(deadPlant);
+
+            // 清理植物视图
+            // 从植物位置计算出对应的格子行和列（与placePlant方法保持一致的计算逻辑）
+            int col = (int)(deadPlant.getPosition().x() / (80 + 2));
+            int row = (int)(deadPlant.getPosition().y() / (80 + 2));
+
+            // 获取对应的单元格并清除植物视图
+            String cellKey = row + "," + col;
+            Pane cell = plantCells.get(cellKey);
+            if (cell != null) {
+                cell.getChildren().clear(); // 清除单元格中的所有子节点（即植物视图）
+            }
+
+            System.out.println("移除死亡植物: " + deadPlant.getType().name() + ", 位置: (" + deadPlant.getPosition().x() + ", " + deadPlant.getPosition().y() + "), 格子: (" + row + ", " + col + ")");
         }
     }
 
