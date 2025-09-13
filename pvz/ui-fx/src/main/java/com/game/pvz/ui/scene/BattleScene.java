@@ -54,7 +54,7 @@ import javafx.util.Duration;
 public class BattleScene extends Scene {
     
     private int level;
-    private volatile boolean battleStarted = false;
+    private boolean battleStarted = false;
     private GameLoopService gameLoopService;
     private SunBankService sunBankService;
     private GridPane gameGrid; // 游戏棋盘
@@ -85,6 +85,7 @@ public class BattleScene extends Scene {
     private Map<Integer, Region> cartViews = new HashMap<>(); // 小推车视图映射（按车道索引）
     private boolean isShovelMode = false; // 铲子模式标志
     private Button shovelButton; // 铲子按钮
+    private boolean gameOver = false;
 
     public BattleScene(int level) {
         super(new Pane());
@@ -513,6 +514,7 @@ public class BattleScene extends Scene {
     public void stopBattle() {
         if (battleStarted) {
             battleStarted = false;
+            gameOver = false; // 重置游戏结束状态
             battleStatusText.setText("战斗已停止");
             startButton.setDisable(false);
             startButton.setText("开始战斗");
@@ -652,7 +654,7 @@ public class BattleScene extends Scene {
      * 阳光自动生成任务
      */
     private void sunGenerationTask() {
-        while (battleStarted) {
+        while (battleStarted&& !gameOver) {
             try {
                 // 每5秒生成一些阳光
                 Thread.sleep(2000+random.nextInt(5000));
@@ -776,7 +778,7 @@ public class BattleScene extends Scene {
         AnimationTimer timer = new AnimationTimer() {
             @Override
             public void handle(long now) {
-                if (battleStarted) {
+                if (battleStarted&& !gameOver) {
                     // 更新僵尸位置
                     updateZombies();
 
@@ -822,91 +824,93 @@ public class BattleScene extends Scene {
                 zombie.setPosition(new Position(newX, container.getLayoutY()));
 
 
-                // 检查僵尸是否移出屏幕左侧
-                if (newX + container.getPrefWidth() < 0) {
-                    System.out.println("僵尸走出左侧窗口，游戏失败！");
-                    battleStatusText.setText("游戏失败！僵尸已经进入屋子！");
-                    stopBattle();
-                    return; // 立即退出方法，不再处理其他僵尸
+                // 检查僵尸是否到达终点（游戏失败条件）
+                if (newX + container.getPrefWidth() < 82) { // 82是游戏网格的偏移量，代表玩家的房子位置
+                    // 僵尸到达终点，游戏失败
+                    gameOver = true;
+                    showGameOverDialog();
+                    break; // 一旦检测到游戏失败，立即退出循环
                 }
             }
         }
-        // 处理小推车
-        for (Cart cart : new ArrayList<>(carts)) {
-            if (cart.isTriggered()) {
-                // 小推车被触发，向右移动
-                double moveSpeed = 5; // 小推车移动速度
-                Region cartView = cartViews.get(cart.getLaneIndex());
+        if (!gameOver) {
+            // 处理小推车
+            for (Cart cart : new ArrayList<>(carts)) {
+                if (cart.isTriggered()) {
+                    // 小推车被触发，向右移动
+                    double moveSpeed = 5; // 小推车移动速度
+                    Region cartView = cartViews.get(cart.getLaneIndex());
 
-                if (cartView != null) {
-                    // 更新小推车视图位置
-                    double newX = cartView.getLayoutX() + moveSpeed;
-                    cartView.setLayoutX(newX);
+                    if (cartView != null) {
+                        // 更新小推车视图位置
+                        double newX = cartView.getLayoutX() + moveSpeed;
+                        cartView.setLayoutX(newX);
 
-                    // 更新小推车实体位置
-                    cart.updatePosition(moveSpeed);
+                        // 更新小推车实体位置
+                        cart.updatePosition(moveSpeed);
 
-                    // 检查小推车是否清除碰到的僵尸
-                    for (Zombie zombie : new ArrayList<>(zombies)) {
-                        if (zombie.isDead()) continue;
+                        // 检查小推车是否清除碰到的僵尸
+                        for (Zombie zombie : new ArrayList<>(zombies)) {
+                            if (zombie.isDead()) continue;
 
-                        if (zombie.getLaneIndex() == cart.getLaneIndex()) {
-                            // 计算僵尸位置
-                            Pane zombieContainer = zombieContainers.get(zombie.getId());
-                            if (zombieContainer != null) {
-                                double zombieX = zombieContainer.getLayoutX();
+                            if (zombie.getLaneIndex() == cart.getLaneIndex()) {
+                                // 计算僵尸位置
+                                Pane zombieContainer = zombieContainers.get(zombie.getId());
+                                if (zombieContainer != null) {
+                                    double zombieX = zombieContainer.getLayoutX();
 
-                                // 检查小推车是否碰到僵尸
-                                if (zombieX <= newX + 60 && zombieX + 50 >= newX) {
-                                    // 清除僵尸
-                                    System.out.println("小推车清除僵尸！车道：" + cart.getLaneIndex());
-                                    removeZombie(zombie.getId());
+                                    // 检查小推车是否碰到僵尸
+                                    if (zombieX <= newX + 60 && zombieX + 50 >= newX) {
+                                        // 清除僵尸
+                                        System.out.println("小推车清除僵尸！车道：" + cart.getLaneIndex());
+                                        removeZombie(zombie.getId());
+                                    }
                                 }
                             }
                         }
-                    }
 
-                    // 检查小推车是否移动到屏幕右侧，移出屏幕则消失
+                        // 检查小推车是否移动到屏幕右侧，移出屏幕则消失
 
-                    if (newX > 984) {
+                        if (newX > 984) {
 
-                        System.out.println("小推车移出屏幕！");
-                        zombieLayer.getChildren().remove(cartView);
-                        cartViews.remove(cart.getLaneIndex());
-                        cart.setActive(false);
-                        carts.remove(cart);
-                    }
-                }
-            }
-        }
-        // 检查僵尸是否触碰到小推车
-        for (Zombie zombie : zombies) {
-            if (zombie.isDead()) continue;
-
-            int laneIndex = zombie.getLaneIndex();
-            Position zombiePos = zombie.getPosition();
-
-            // 查找对应车道的小推车
-            for (Cart cart : carts) {
-                if (cart.getLaneIndex() == laneIndex && cart.isActive() && !cart.isTriggered()) {
-                    Position cartPos = cart.getPosition();
-
-                    // 检查僵尸是否触碰到小推车
-                    if (zombiePos.x() <= cartPos.x() + 60) { // 小推车宽度为60
-                        // 触发小推车
-                        cart.trigger();
-
-                        // 这里可以添加小推车触发后的逻辑，比如清除当前车道的所有僵尸
-                        // 为了简化，这里只是打印一条消息
-                        System.out.println("小推车被触发！车道：" + laneIndex);
-
+                            System.out.println("小推车移出屏幕！");
+                            zombieLayer.getChildren().remove(cartView);
+                            cartViews.remove(cart.getLaneIndex());
+                            cart.setActive(false);
+                            carts.remove(cart);
+                        }
                     }
                 }
             }
-        }
-        // 移除需要删除的僵尸
-        for (UUID zombieId : zombiesToRemove) {
-            removeZombie(zombieId);
+            // 检查僵尸是否触碰到小推车
+            for (Zombie zombie : zombies) {
+                if (zombie.isDead()) continue;
+
+                int laneIndex = zombie.getLaneIndex();
+                Position zombiePos = zombie.getPosition();
+
+                // 查找对应车道的小推车
+                for (Cart cart : carts) {
+                    if (cart.getLaneIndex() == laneIndex && cart.isActive() && !cart.isTriggered()) {
+                        Position cartPos = cart.getPosition();
+
+                        // 检查僵尸是否触碰到小推车
+                        if (zombiePos.x() <= cartPos.x() + 60) { // 小推车宽度为60
+                            // 触发小推车
+                            cart.trigger();
+
+                            // 这里可以添加小推车触发后的逻辑，比如清除当前车道的所有僵尸
+                            // 为了简化，这里只是打印一条消息
+                            System.out.println("小推车被触发！车道：" + laneIndex);
+
+                        }
+                    }
+                }
+            }
+            // 移除需要删除的僵尸
+            for (UUID zombieId : zombiesToRemove) {
+                removeZombie(zombieId);
+            }
         }
     }
     /**
@@ -1256,6 +1260,118 @@ public class BattleScene extends Scene {
             }
         } else {
             battleStatusText.setText("该位置没有植物！");
+        }
+
+    }
+    /**
+     * 显示游戏结束对话框
+     */
+    private void showGameOverDialog() {
+        // 停止游戏
+        stopBattle();
+
+        // 创建一个半透明的遮罩层
+        Pane overlay = new Pane();
+        overlay.setPrefSize(1200, 700);
+        overlay.setStyle("-fx-background-color: rgba(0, 0, 0, 0.7);");
+        overlay.setMouseTransparent(false);
+
+        // 创建游戏结束对话框
+        VBox gameOverBox = new VBox(20);
+        gameOverBox.setAlignment(Pos.CENTER);
+        gameOverBox.setPrefSize(400, 300);
+        gameOverBox.setStyle("-fx-background-color: #283618; -fx-border-color: #bc6c25; -fx-border-width: 3; -fx-padding: 20;");
+        gameOverBox.setLayoutX((1200 - 400) / 2);
+        gameOverBox.setLayoutY((700 - 300) / 2);
+
+        // 游戏结束文本
+        Text gameOverText = new Text("游戏失败！");
+        gameOverText.setFont(Font.font("Arial", FontWeight.BOLD, 32));
+        gameOverText.setFill(Color.RED);
+
+        // 创建按钮容器
+        HBox buttonBox = new HBox(20);
+        buttonBox.setAlignment(Pos.CENTER);
+
+        // 返回选关按钮
+        Button backToLevelSelectButton = new Button("返回选关");
+        backToLevelSelectButton.setPrefSize(120, 40);
+        backToLevelSelectButton.setFont(Font.font("Arial", FontWeight.NORMAL, 16));
+        backToLevelSelectButton.setOnAction(e -> {
+            // 移除遮罩层和对话框
+            ((Pane) getRoot()).getChildren().remove(overlay);
+            // 跳转到选关界面
+            Router.getInstance().showLevelSelectScene();
+        });
+
+        // 重新游戏按钮
+        Button restartButton = new Button("重新游戏");
+        restartButton.setPrefSize(120, 40);
+        restartButton.setFont(Font.font("Arial", FontWeight.NORMAL, 16));
+        restartButton.setOnAction(e -> {
+            // 移除遮罩层和对话框
+            ((Pane) getRoot()).getChildren().remove(overlay);
+            // 重新开始当前关卡
+            restartLevel();
+        });
+
+        buttonBox.getChildren().addAll(backToLevelSelectButton, restartButton);
+        gameOverBox.getChildren().addAll(gameOverText, buttonBox);
+        overlay.getChildren().add(gameOverBox);
+
+        // 将遮罩层添加到场景根节点
+        ((Pane) getRoot()).getChildren().add(overlay);
+    }
+
+    /**
+     * 重新开始当前关卡
+     */
+    private void restartLevel() {
+        // 清空游戏中的所有实体
+        plants.clear();
+        zombies.clear();
+        projectiles.clear();
+        activeSuns.clear();
+
+        // 重置游戏状态
+        battleStarted = false;
+        gameOver = false;
+        selectedPlantType = null;
+        isShovelMode = false;
+
+        // 重置UI状态
+        battleStatusText.setText("战斗准备中...");
+        startButton.setDisable(false);
+        startButton.setText("开始战斗");
+        shovelButton.setStyle("-fx-background-color: #6c757d; -fx-text-fill: white;");
+
+        // 清空植物网格
+        for (Pane cell : plantCells.values()) {
+            cell.getChildren().clear();
+        }
+
+        // 清空阳光、僵尸和子弹层
+        sunLayer.getChildren().clear();
+        zombieLayer.getChildren().clear();
+        projectileLayer.getChildren().clear();
+
+        // 清空映射
+        zombieViews.clear();
+        zombieContainers.clear();
+        projectileViews.clear();
+
+        // 重置阳光数量
+        sunBankService.setSunAmount(50); // 设置初始阳光数量
+        sunAmountText.setText("阳光: " + sunBankService.getSunAmount());
+
+        // 重新创建小推车
+        carts.clear();
+        cartViews.clear();
+        for (int laneIndex = 0; laneIndex < 5; laneIndex++) {
+            Position cartPosition = new Position(10, laneIndex * 82 + 5 + 40);
+            Cart cart = CartFactory.getInstance().createDefaultCart(cartPosition, laneIndex);
+            carts.add(cart);
+            renderCart(cart);
         }
     }
 
