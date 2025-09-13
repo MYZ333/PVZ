@@ -7,13 +7,9 @@
         <sourceTestOutputDir name="target/generated-test-sources/test-annotations" />
         <outputRelativeToContentRoot value="true" />
         <module name="desktop-launcher" />
-        <module name="ui-fx" />
         <module name="game-core" />
+        <module name="ui-fx" />
       </profile>
     </annotationProcessing>
-    <bytecodeTargetLevel>
-      <module name="untitled" target="1.5" />
-      <module name="untitled (1)" target="1.5" />
-    </bytecodeTargetLevel>
   </component>
 </project>
