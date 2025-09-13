@@ -8,7 +8,7 @@ import com.game.pvz.module.entity.Position;
  * 实现点击收集阳光的功能
  */
 public class Sun implements GameObject {
-    private Position position; // 阳光位置
+    private final Position position; // 阳光位置
     private final int value; // 阳光价值
     private boolean collected; // 是否已被收集
 
@@ -18,12 +18,6 @@ public class Sun implements GameObject {
         this.collected = false;
     }
 
-    /**
-     * 设置阳光位置
-     */
-    public void setPosition(Position position) {
-        this.position = position;
-    }
     /**
      * 获取阳光位置
      */

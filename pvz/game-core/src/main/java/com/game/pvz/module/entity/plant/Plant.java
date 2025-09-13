@@ -271,7 +271,7 @@ public class Plant implements GameObject {
         }
 
         // 向日葵每10秒生产一个阳光
-        if (currentTime - lastProduceTime >= 2000) {
+        if (currentTime - lastProduceTime >= 10000) {
             System.out.println("向日葵生产阳光: " + currentTime + " - " + lastProduceTime + " >= 10000");
             lastProduceTime = currentTime;
             return true;
