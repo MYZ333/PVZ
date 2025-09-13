@@ -25,6 +25,7 @@ import javafx.geometry.Insets;
 import javafx.geometry.Pos;
 import javafx.scene.Scene;
 import javafx.scene.control.Button;
+import javafx.scene.image.Image;
 import javafx.scene.image.ImageView;
 import javafx.scene.layout.*;
 import javafx.scene.paint.Color;
@@ -95,7 +96,19 @@ public class BattleScene extends Scene {
     private void initialize() {
         System.out.println("BattleScene.initialize() 方法开始执行");
         Pane root = (Pane) getRoot();
-        root.setStyle("-fx-background-color: #606c38;"); // 绿色背景
+        
+        // 添加背景图片
+        Image backgroundImage = ResourcePool.getInstance().getImage("/pic/background02.png");
+        if (backgroundImage != null) {
+            ImageView backgroundView = new ImageView(backgroundImage);
+            backgroundView.setFitWidth(1200);
+            backgroundView.setFitHeight(700);
+            backgroundView.setPreserveRatio(false);
+            root.getChildren().add(0, backgroundView);
+        } else {
+            // 如果图片加载失败，使用备用背景色
+            root.setStyle("-fx-background-color: #606c38;");
+        }
 
         // 初始化植物图片路径映射（先空着，后续可以填充实际路径）
         plantImagePaths.put(PlantType.SUNFLOWER, ""); // 向日葵图片路径
@@ -145,7 +158,7 @@ public class BattleScene extends Scene {
         gameGrid.setHgap(2);
         gameGrid.setVgap(2);
      gameGrid.setAlignment(Pos.TOP_LEFT);
-        gameGrid.setStyle("-fx-background-color: #283618;");
+
         
         // 创建5x12的游戏网格（5行12列）
         for (int row = 0; row < 5; row++) {
@@ -154,7 +167,10 @@ public class BattleScene extends Scene {
                 cell.setPrefSize(80, 80);
 
 
-                cell.setStyle("-fx-background-color: #3d5a14; -fx-border-color: #606c38; -fx-border-width: 1;");
+
+                // 设置网格为完全透明，无边框
+                cell.setStyle("-fx-background-color: transparent; -fx-border-color: transparent; -fx-border-width: 0;");
+
                 
                 // 保存行列信息到单元格
                 final int finalRow = row;
@@ -183,7 +199,7 @@ public class BattleScene extends Scene {
 
         // 创建子弹层，用于显示子弹
         projectileLayer = new Pane();
- feature-zhangbo
+
         projectileLayer.setPrefSize(984, 500);
 
         projectileLayer.setMouseTransparent(true);
