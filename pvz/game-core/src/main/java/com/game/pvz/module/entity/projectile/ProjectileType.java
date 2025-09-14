@@ -5,11 +5,11 @@ package com.game.pvz.module.entity.projectile;
  */
 public enum ProjectileType {
     NONE(0, 0, false, false, 0),            // 无子弹（默认）
-    PEANUT(20, 20, false, false, 0),        // 普通豌豆
-    FIRE_PEANUT(30, 20, true, false, 3000), // 火焰豌豆（燃烧效果）
-    ICE_PEANUT(10, 20, false, true, 2000),  // 冰冻豌豆（减速效果）
-    CABBAGE(20, 15, false, false, 0),       // 卷心菜（投掷类）
-    MELON(40, 10, false, false, 0);         // 西瓜（投掷类）
+    PEANUT(20, 100, false, false, 0),        // 普通豌豆
+    FIRE_PEANUT(30, 100, true, false, 3000), // 火焰豌豆（燃烧效果）
+    ICE_PEANUT(20, 60, false, true, 2000),  // 冰冻豌豆（减速效果）
+    CABBAGE(20, 55, false, false, 0),       // 卷心菜（投掷类）
+    MELON(40, 40, false, false, 0);         // 西瓜（投掷类）
     
     private final int damage;         // 伤害值
     private final int speed;          // 移动速度
