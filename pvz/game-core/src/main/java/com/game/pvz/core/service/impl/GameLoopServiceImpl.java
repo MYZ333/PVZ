@@ -112,10 +112,5 @@ public class GameLoopServiceImpl implements GameLoopService {
             System.out.println("游戏帧: " + frameCount + ", 运行时间: " + elapsedTime.toSeconds() + "秒");
         }
         
-//        // 每30帧（约0.5秒）尝试生成一个僵尸，增加生成频率以便测试
-//        if (spawnService != null && frameCount % 180 == 0 && !stopSpawningZombies) {
-//            System.out.println("尝试生成僵尸...");
-//            spawnService.spawnZombie();
-//        }
     }
 }
