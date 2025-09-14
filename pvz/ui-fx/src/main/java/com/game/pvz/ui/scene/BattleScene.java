@@ -1,5 +1,9 @@
 package com.game.pvz.ui.scene;
 
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Random;
+import java.util.concurrent.atomic.AtomicBoolean;
 import com.game.pvz.core.event.EventBus;
 import com.game.pvz.core.event.GameEventListener;
 import com.game.pvz.core.event.ZombieSpawned;
@@ -19,9 +23,11 @@ import com.game.pvz.module.entity.zombie.ZombieFactory;
 import com.game.pvz.module.entity.zombie.ZombieType;
 import com.game.pvz.ui.app.Router;
 import com.game.pvz.ui.app.ResourcePool;
+import com.game.pvz.ui.component.PlantCard;
 import javafx.animation.AnimationTimer;
 import javafx.animation.KeyFrame;
 import javafx.animation.Timeline;
+import javafx.geometry.Bounds;
 import javafx.geometry.Insets;
 import javafx.geometry.Pos;
 import javafx.scene.Scene;
@@ -35,17 +41,15 @@ import javafx.scene.shape.Circle;
 import javafx.scene.text.Font;
 import javafx.scene.text.FontWeight;
 import javafx.scene.text.Text;
-import java.util.ArrayList;
-import java.util.List;
 import java.util.Map;
 import java.util.HashMap;
 import java.util.UUID;
-import java.util.Random;
 import com.game.pvz.module.entity.projectile.Projectile;
 import com.game.pvz.module.entity.projectile.ProjectileType;
 import java.util.concurrent.CopyOnWriteArrayList;
 import com.game.pvz.module.entity.cart.Cart;
 import com.game.pvz.module.entity.cart.CartFactory;
+import com.game.pvz.module.entity.cart.CartType;
 import javafx.util.Duration;
 /**
  * 战场场景（类）
@@ -76,6 +80,7 @@ public class BattleScene extends Scene {
     private Map<UUID, ImageView> zombieViews = new HashMap<>(); // 僵尸视图映射
     private Map<UUID, Pane> zombieContainers = new HashMap<>(); // 僵尸容器映射
     private Map<Projectile, Pane> projectileViews = new HashMap<>(); // 子弹视图映射，直接使用Projectile对象作为键
+
     private Map<PlantType, String> plantImagePaths = new HashMap<>();
     
     // 植物按钮大小控制参数
@@ -86,7 +91,6 @@ public class BattleScene extends Scene {
     private double plantSelectorX; // 植物选择栏X坐标
     private double plantSelectorY; // 植物选择栏Y坐标
     
-    // 植物按钮视图映射，用于控制选中状态
     private Map<PlantType, ImageView> plantButtonViews = new HashMap<>(); // 植物按钮视图映射，用于控制选中状态
     private final Map<Sun, Double> sunTargetPositions = new HashMap<>(); // 阳光目标位置映射
     private SpawnService spawnService; // 僵尸生成服务
@@ -104,11 +108,29 @@ public class BattleScene extends Scene {
     private Button pauseButton; // 新增：暂停按钮
     private boolean isPaused = false; // 新增：暂停状态标志
     private Thread sunGenerationThread; // 添加阳光生成线程引用
+    private Thread zombieSpawnThread;
+    private boolean isFirstZombieSpawn = true;
+    private boolean flagZombieSpawned = false; // 新增：旗帜僵尸是否已生成的标志
+    private boolean halfwayZombieWaveTriggered = false; // 新增：50%进度僵尸潮是否已触发
+    private boolean finalZombieWaveTriggered = false; // 新增：100%进度僵尸潮是否已触发
+    private boolean isHalfwayProgressReached = false; // 跟踪是否已达到50%进度
 
     // 根据关卡设置不同的战斗持续时间（毫秒）
     private long getBattleDurationByLevel() {
-        return 10000; // 默认3分钟，可根据关卡调整
+        // 根据关卡返回不同的战斗持续时间（毫秒）
+        switch (level) {
+            case 1:
+                return 60000; // 关卡1: 1分钟
+            case 2:
+                return 120000; // 关卡2: 2分钟
+            case 3:
+                return 180000; // 关卡3: 3分钟
+            default:
+                // 防止意外情况
+                return 60000;
+        }
     }
+
     public BattleScene(int level) {
         super(new Pane());
         this.level = level;
@@ -194,12 +216,12 @@ public class BattleScene extends Scene {
         progressBar.setStyle("-fx-accent: #2a9d8f;"); // 设置进度条颜色
 
         topBar.getChildren().addAll(levelText, battleStatusText, progressBar);
-        
+     
         // 游戏棋盘
         gameGrid = new GridPane();
         gameGrid.setHgap(2);
         gameGrid.setVgap(2);
-     gameGrid.setAlignment(Pos.TOP_LEFT);
+        gameGrid.setAlignment(Pos.TOP_LEFT);
 
         
         // 创建5x12的游戏网格（5行12列）
@@ -237,7 +259,7 @@ public class BattleScene extends Scene {
 
         zombieLayer.setPrefSize(984, 500);
 
-       zombieLayer.setMouseTransparent(false);
+        zombieLayer.setMouseTransparent(false);
 
         // 创建子弹层，用于显示子弹
         projectileLayer = new Pane();
@@ -402,6 +424,7 @@ public class BattleScene extends Scene {
         
         // 将除了plantSelector之外的元素添加到主布局
         mainLayout.getChildren().addAll(topBar, gameContainer, spacer, buttonBar);
+      
         // 添加这一行代码，确保gameContainer在水平方向上居中
         mainLayout.setAlignment(Pos.TOP_CENTER);
         
@@ -446,41 +469,37 @@ public class BattleScene extends Scene {
         // 不显示阳光成本数字
         plantBox.getChildren().add(plantButton);
         plantSelector.getChildren().add(plantBox);
-        
+
         // 设置按钮点击事件
-        plantButton.setOnAction(e -> {
+        plantCard.setOnAction(e -> {
             if (battleStarted) {
                 // 点击植物卡片时取消铲子模式
                 if (isShovelMode) {
                     isShovelMode = false;
                     shovelButton.setStyle("-fx-background-color: #6c757d; -fx-text-fill: white;");
                 }
-                if (selectedPlantType == type) {
-                    // 如果再次点击已选中的植物，则取消选择
-                    selectedPlantType = null;
-                    plantButton.setStyle("-fx-background-color: transparent; -fx-border-color: transparent; -fx-background-radius: 0; -fx-background-insets: 0; -fx-border-width: 0;");
-                    battleStatusText.setText("已取消选择植物");
-                } else {
-                    // 检查阳光是否足够
-                    if (sunBankService.getSunAmount() >= type.getCost()) {
-                        // 先恢复其他按钮的样式
-                        for (javafx.scene.Node node : plantSelector.getChildren()) {
-                            if (node instanceof VBox) {
-                                VBox box = (VBox) node;
-                                if (box.getChildren().size() > 0 && box.getChildren().get(0) instanceof Button) {
-                                    Button btn = (Button) box.getChildren().get(0);
-                                    btn.setStyle("-fx-background-color: transparent; -fx-border-color: transparent; -fx-background-radius: 0; -fx-background-insets: 0; -fx-border-width: 0;");
-                                }
+
+                if (plantCard.isReady() && sunBankService.getSunAmount() >= type.getCost()) {
+                    // 先恢复其他按钮的样式
+                    for (javafx.scene.Node node : plantSelector.getChildren()) {
+                        if (node instanceof VBox) {
+                            VBox box = (VBox) node;
+                            if (box.getChildren().size() > 0 && box.getChildren().get(0) instanceof PlantCard) {
+                                PlantCard card = (PlantCard) box.getChildren().get(0);
+                                if (!card.isReady()) continue;
+                                card.setStyle("-fx-background-color: #bc6c25; -fx-text-fill: white;");
                             }
                         }
-                        
-                        // 选中当前植物
-                        selectedPlantType = type;
-                        plantButton.setStyle("-fx-background-color: transparent; -fx-border-color: transparent; -fx-background-radius: 0; -fx-background-insets: 0; -fx-border-width: 0;");
-                        battleStatusText.setText("已选择: " + type.name() + "，请点击格子放置");
-                    } else {
-                        battleStatusText.setText("阳光不足！");
                     }
+
+                    // 选中当前植物
+                    selectedPlantType = type;
+                    plantCard.setStyle("-fx-background-color: #fefae0; -fx-text-fill: #bc6c25;");
+                    battleStatusText.setText("已选择: " + type.name() + "，请点击格子放置");
+                } else if (!plantCard.isReady()) {
+                    battleStatusText.setText("植物冷却中...");
+                } else {
+                    battleStatusText.setText("阳光不足！");
                 }
             } else {
                 battleStatusText.setText("请先开始战斗！");
@@ -587,7 +606,6 @@ public class BattleScene extends Scene {
             battleStartTime = System.currentTimeMillis();
             battleProgress = 0;
             stopSpawningZombies = false;
-            // 启动游戏循环
             ((GameLoopServiceImpl) gameLoopService).setSpawnService(spawnService);
             gameLoopService.start();
 
@@ -595,13 +613,9 @@ public class BattleScene extends Scene {
             sunGenerationThread = new Thread(this::sunGenerationTask);
             sunGenerationThread.setDaemon(true); // 设置为守护线程，避免阻止程序退出
             sunGenerationThread.start();
-            // 直接创建并渲染一个僵尸，用于测试渲染逻辑
-            System.out.println("直接创建并渲染一个测试僵尸...");
-            Position position = new Position(984, 1 * 82 + 5); // 在第2个车道，使用与renderZombie相同的位置计算
-            Zombie testZombie = ZombieFactory.getInstance().createZombie(ZombieType.NORMAL, position, 1);
-            zombies.add(testZombie);
-            renderZombie(testZombie, 1);
-            System.out.println("测试僵尸已添加到场景");
+            // 使用我们的新方法启动僵尸生成任务
+            startZombieSpawnTask();
+
 
 
             System.out.println("开始关卡 " + level + " 的战斗！");
@@ -628,7 +642,8 @@ public class BattleScene extends Scene {
             
             // 创建植物实体
             double x = col * (80 + 2);
-            double y = row * (80 + 2);
+            double y = row *82+5;
+
             Position position = new Position(x, y);
             Plant plant = PlantFactory.getInstance().createPlant(type, position);
             plants.add(plant);
@@ -640,9 +655,22 @@ public class BattleScene extends Scene {
 
             // 渲染植物（用方块代表）
             renderPlant(plant, cell, type);
-            
+            // 启动植物冷却
+            for (javafx.scene.Node node : plantSelector.getChildren()) {
+                if (node instanceof VBox) {
+                    VBox box = (VBox) node;
+                    if (box.getChildren().size() > 0 && box.getChildren().get(0) instanceof PlantCard) {
+                        PlantCard card = (PlantCard) box.getChildren().get(0);
+                        if (card.getPlantType().equals(type.name())) {
+                            card.startCooldown(type.getCooldown());
+                            break;
+                        }
+                    }
+                }
+            }
+
             battleStatusText.setText("已放置: " + type.name());
-            
+
             // 取消选中状态
             selectedPlantType = null;
             // 恢复按钮样式，保持透明背景
@@ -696,7 +724,7 @@ public class BattleScene extends Scene {
                 return "-fx-background-color: #6495ED; -fx-border-color: #4169E1; -fx-border-width: 2;";
         }
     }
-    
+
     public void stopBattle() {
         if (battleStarted) {
             battleStarted = false;
@@ -707,6 +735,14 @@ public class BattleScene extends Scene {
             startButton.setText("开始战斗");
             pauseButton.setDisable(true); // 禁用暂停按钮
             gameLoopService.stop();
+            stopSpawningZombies = true;
+
+            // 中断僵尸生成线程
+            if (zombieSpawnThread != null && zombieSpawnThread.isAlive()) {
+                zombieSpawnThread.interrupt();
+                zombieSpawnThread = null;
+            }
+
             // 中断阳光生成线程
             if (sunGenerationThread != null && sunGenerationThread.isAlive()) {
                 sunGenerationThread.interrupt();
@@ -718,15 +754,11 @@ public class BattleScene extends Scene {
                 activeSuns.clear();
             });
 
-            // 清理僵尸
-            cleanupZombies();
-
-            // 清理子弹
-            if (projectileLayer != null) {
-                projectileLayer.getChildren().clear();
-            }
+            // 清空游戏中的所有实体
+            plants.clear();
+            zombies.clear();
             projectiles.clear();
-            projectileViews.clear();
+            activeSuns.clear();
 
             System.out.println("停止战斗！");
         }
@@ -765,10 +797,10 @@ public class BattleScene extends Scene {
             
             // 设置僵尸初始位置（从右侧进入）
 
-            double x = 984; // 使用固定值，确保从屏幕右侧进入
-            double y = laneIndex *82 + 5;  // 放置在对应车道
+            double x = zombie.getPosition().x(); // 获取僵尸实体的X坐标
+            double y = zombie.getPosition().y(); // 获取僵尸实体的Y坐标
 
-            
+
             // 创建僵尸视图容器
             Pane zombieContainer = new Pane();
             zombieContainer.setPrefSize(70, 70);
@@ -806,11 +838,17 @@ public class BattleScene extends Scene {
             case FLAG:
                 style = "-fx-background-color: #CD5C5C; -fx-border-color: #B22222; -fx-border-width: 2;";
                 break;
+            case CONEHEAD:
+                style = "-fx-background-color: #228B22; -fx-border-color: #006400; -fx-border-width: 2;";
+                break;
             case BUCKETHEAD:
                 style = "-fx-background-color: #708090; -fx-border-color: #4682B4; -fx-border-width: 2;";
                 break;
             case FOOTBALL:
                 style = "-fx-background-color: #FFD700; -fx-border-color: #FFA500; -fx-border-width: 2;";
+                break;
+            case GARGANTUAR:
+                style = "-fx-background-color: #800000; -fx-border-color: #660000; -fx-border-width: 3;";
                 break;
             default:
                 style = "-fx-background-color: #8B4513; -fx-border-color: #654321; -fx-border-width: 2;";
@@ -1010,7 +1048,134 @@ public class BattleScene extends Scene {
         };
         timer.start();
     }
-    
+    /**
+     * 根据关卡获取应该生成的僵尸类型
+     * @return 该关卡可能生成的僵尸类型数组
+     */
+    private List<ZombieType> getZombieTypesByLevel() {
+        List<ZombieType> zombieTypes = new ArrayList<>();
+        switch (level) {
+            case 1:
+                // 第一关：
+                zombieTypes.add(ZombieType.NORMAL);
+                zombieTypes.add(ZombieType.FLAG);
+                zombieTypes.add(ZombieType.CONEHEAD);
+                break;
+            case 2:
+                // 第二关：
+                zombieTypes.add(ZombieType.NORMAL);
+                zombieTypes.add(ZombieType.FLAG);
+                zombieTypes.add(ZombieType.CONEHEAD);
+                zombieTypes.add(ZombieType.BUCKETHEAD);
+                break;
+            case 3:
+                // 第三关：生成所有类型的僵尸
+                zombieTypes.add(ZombieType.NORMAL);
+                zombieTypes.add(ZombieType.FLAG);
+                zombieTypes.add(ZombieType.BUCKETHEAD);
+                zombieTypes.add(ZombieType.CONEHEAD);
+                zombieTypes.add(ZombieType.FOOTBALL);
+                zombieTypes.add(ZombieType.GARGANTUAR);
+                break;
+            default:
+                // 默认情况下，只生成普通僵尸
+                zombieTypes.add(ZombieType.NORMAL);
+        }
+        return zombieTypes;
+    }
+    /**
+     * 根据关卡获取僵尸生成速率
+     * @return 僵尸生成的基础间隔时间（毫秒）
+     */
+    private int getZombieSpawnRateByLevel() {
+        switch (level) {
+            case 1:
+                return 5000; // 关卡1：每5秒生成一个僵尸
+            case 2:
+                return 4000; // 关卡2：每4秒生成一个僵尸
+            case 3:
+                return 3000; // 关卡3：每3秒生成一个僵尸，增加难度
+            default:
+                return 5000;
+        }
+    }
+    /**
+     * 生成僵尸方法（替代原有的EventBus事件方式）
+     */
+    private void spawnZombie(ZombieType type, int laneIndex) {
+        // 使用ZombieFactory创建僵尸实体
+        Position position = new Position(1200, laneIndex * 82 + 5);
+        Zombie zombie = ZombieFactory.getInstance().createZombie(type, position, laneIndex);
+        // 添加调试日志，确认正在生成正确类型的僵尸
+        System.out.println("生成僵尸: " + type.name() + " 在关卡 " + level);
+
+        // 在JavaFX应用线程中添加僵尸
+        javafx.application.Platform.runLater(() -> {
+            zombies.add(zombie);
+            renderZombie(zombie, laneIndex);
+        });
+    }
+
+    /**
+     * 启动僵尸生成任务
+     */
+    private void startZombieSpawnTask() {
+        // 获取当前关卡的僵尸类型配置
+        List<ZombieType> availableZombieTypes = getZombieTypesByLevel();
+        // 获取当前关卡的僵尸生成速率
+        int spawnRate = getZombieSpawnRateByLevel();
+
+        // 添加调试日志，确认当前关卡的僵尸配置
+        System.out.println("关卡 " + level + " 配置: 僵尸类型=" + availableZombieTypes + ", 生成速率=" + spawnRate + "ms");
+
+        // 创建并启动僵尸生成线程
+        zombieSpawnThread = new Thread(() -> {
+            try {
+                // 只在首次启动时等待5秒
+                if (isFirstZombieSpawn) {
+                    Thread.sleep(5000);
+                    isFirstZombieSpawn = false; // 设置标志位，表示已经不是首次启动
+                }
+                while (!stopSpawningZombies && !Thread.currentThread().isInterrupted()) {
+                    // 随机选择一个可用的僵尸类型
+                    ZombieType type;
+                    // 随机选择一个车道（0-4）
+                    int laneIndex = random.nextInt(5);
+                    // 如果是第一次生成僵尸且关卡配置中有旗帜僵尸，强制生成旗帜僵尸
+                    if (!flagZombieSpawned && availableZombieTypes.contains(ZombieType.FLAG)) {
+                        type = ZombieType.FLAG;
+                        flagZombieSpawned = true; // 设置标志，表示旗帜僵尸已生成
+                    } else {
+                        // 随机选择一个可用的僵尸类型，但排除旗帜僵尸（如果已经生成过）
+                        List<ZombieType> tempTypes = new ArrayList<>(availableZombieTypes);
+                        if (flagZombieSpawned && tempTypes.contains(ZombieType.FLAG)) {
+                            tempTypes.remove(ZombieType.FLAG); // 移除旗帜僵尸，避免再次生成
+                        }
+                        // 在进度达到50%之前，排除刚特尔和橄榄球僵尸
+                        if (!isHalfwayProgressReached) {
+                            tempTypes.remove(ZombieType.FOOTBALL);
+                            tempTypes.remove(ZombieType.GARGANTUAR);
+                            // 确保临时列表不为空
+                            if (tempTypes.isEmpty()) {
+                                // 如果移除后没有可用僵尸，至少保留普通僵尸
+                                tempTypes.add(ZombieType.NORMAL);
+                            }
+                        }
+                        type = tempTypes.get(random.nextInt(tempTypes.size()));
+                    }
+                    // 生成僵尸
+                    spawnZombie(type, laneIndex);
+
+                    // 根据关卡设置的生成速率等待
+                    Thread.sleep(spawnRate);
+                }
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+            }
+        });
+        zombieSpawnThread.setDaemon(true);
+        zombieSpawnThread.start();
+    }
     /**
      * 更新僵尸位置
      */
@@ -1543,6 +1708,7 @@ public class BattleScene extends Scene {
                 // 铲除成功后自动退出铲子模式
                 isShovelMode = false;
                 shovelButton.setStyle("-fx-background-color: transparent; -fx-text-fill: white;");
+
             }
         } else {
             battleStatusText.setText("该位置没有植物！");
@@ -1619,6 +1785,9 @@ public class BattleScene extends Scene {
         projectiles.clear();
         activeSuns.clear();
 
+        isFirstZombieSpawn = true; // 重置首次启动标志
+        flagZombieSpawned = false; // 重置旗帜僵尸标志
+
         // 重置游戏状态
         battleStarted = false;
         isPaused = false; // 重置暂停标志
@@ -1626,6 +1795,11 @@ public class BattleScene extends Scene {
         selectedPlantType = null;
         isShovelMode = false;
         stopSpawningZombies = false;
+
+        halfwayZombieWaveTriggered = false; // 重置50%进度僵尸潮标志
+        finalZombieWaveTriggered = false; // 重置100%进度僵尸潮标志
+        isHalfwayProgressReached = false; // 重置50%进度标志位
+
         // 确保GameLoopService也重置停止生成僵尸的状态
         if (gameLoopService instanceof GameLoopServiceImpl) {
             ((GameLoopServiceImpl) gameLoopService).setStopSpawningZombies(false);
@@ -1654,7 +1828,9 @@ public class BattleScene extends Scene {
 
         // 重置阳光数量
         sunBankService.setSunAmount(50); // 设置初始阳光数量
+
         sunAmountText.setText("       " + sunBankService.getSunAmount());
+
 
         // 重新创建小推车
         carts.clear();
@@ -1682,15 +1858,28 @@ public class BattleScene extends Scene {
         battleProgress = Math.min((double) elapsedTime / battleDuration, 1.0);
         progressBar.setProgress(battleProgress);
 
+
+        // 设置进度50%标志位
+        if (battleProgress >= 0.5 && !isHalfwayProgressReached) {
+            isHalfwayProgressReached = true;
+        }
+        // 当进度达到50%且尚未触发僵尸潮时，触发第一波僵尸潮
+        if (battleProgress >= 0.5 && !halfwayZombieWaveTriggered) {
+            halfwayZombieWaveTriggered = true;
+            triggerZombieWave("中期僵尸潮来袭！");
+        }
         // 当进度达到100%时，停止生成僵尸
         if (battleProgress >= 1.0 && !stopSpawningZombies) {
-            stopSpawningZombies = true;
-            // 调用GameLoopServiceImpl中的方法停止生成僵尸
-            if (gameLoopService instanceof GameLoopServiceImpl) {
-                ((GameLoopServiceImpl) gameLoopService).setStopSpawningZombies(true);
+            // 触发最终僵尸潮
+            if (!finalZombieWaveTriggered) {
+                finalZombieWaveTriggered = true;
+                triggerZombieWave("最终僵尸潮来袭！消灭所有僵尸获胜！");
             }
-            battleStatusText.setText("僵尸生成已停止！消灭所有剩余僵尸获胜！");
-            System.out.println("战斗进度已满，停止生成僵尸");
+
+            // 不立即停止生成僵尸，让僵尸潮完成
+            if (stopSpawningZombies) {
+                battleStatusText.setText("僵尸生成已停止！消灭所有剩余僵尸获胜！");
+            }
         }
     }
 
@@ -1746,18 +1935,21 @@ public class BattleScene extends Scene {
             Router.getInstance().showLevelSelectScene();
         });
 
+        buttonBox.getChildren().add(backToLevelSelectButton);
         // 开始下一关按钮 - 修改自"重新游戏"按钮
-        Button nextLevelButton = new Button("开始下一关");
-        nextLevelButton.setPrefSize(120, 40);
-        nextLevelButton.setFont(Font.font("Arial", FontWeight.NORMAL, 16));
-        nextLevelButton.setOnAction(e -> {
-            // 移除遮罩层和对话框
-            ((Pane) getRoot()).getChildren().remove(overlay);
-            // 跳转到下一个关卡
-            Router.getInstance().showBattleScene(level + 1);
-        });
-
-        buttonBox.getChildren().addAll(backToLevelSelectButton, nextLevelButton);
+        if (level < 3) {
+            // 开始下一关按钮
+            Button nextLevelButton = new Button("开始下一关");
+            nextLevelButton.setPrefSize(120, 40);
+            nextLevelButton.setFont(Font.font("Arial", FontWeight.NORMAL, 16));
+            nextLevelButton.setOnAction(e -> {
+                // 移除遮罩层和对话框
+                ((Pane) getRoot()).getChildren().remove(overlay);
+                // 跳转到下一个关卡
+                Router.getInstance().showBattleScene(level + 1);
+            });
+            buttonBox.getChildren().add(nextLevelButton);
+        }
         gameVictoryBox.getChildren().addAll(gameVictoryText, buttonBox);
         overlay.getChildren().add(gameVictoryBox);
 
@@ -1775,6 +1967,13 @@ public class BattleScene extends Scene {
                 sunGenerationThread.interrupt();
                 sunGenerationThread = null;
             }
+
+            // 中断僵尸生成线程（新增）
+            if (zombieSpawnThread != null && zombieSpawnThread.isAlive()) {
+                zombieSpawnThread.interrupt();
+                zombieSpawnThread = null;
+            }
+
             // 暂停游戏循环
             gameLoopService.stop();
             // 显示暂停对话框
@@ -1795,6 +1994,10 @@ public class BattleScene extends Scene {
             sunGenerationThread = new Thread(this::sunGenerationTask);
             sunGenerationThread.setDaemon(true);
             sunGenerationThread.start();
+
+            // 重新启动僵尸生成线程（新增）
+            startZombieSpawnTask();
+
             // 隐藏暂停对话框
             Pane root = (Pane) getRoot();
             for (javafx.scene.Node node : root.getChildren()) {
@@ -1875,5 +2078,97 @@ public class BattleScene extends Scene {
         // 将遮罩层添加到场景根节点
         ((Pane) getRoot()).getChildren().add(overlay);
     }
+
+    /**
+     * 触发僵尸潮
+     * @param message 显示给玩家的消息
+     */
+    private void triggerZombieWave(String message) {
+        // 更新战斗状态文本
+        battleStatusText.setText(message);
+        System.out.println(message);
+
+        // 创建并启动僵尸潮线程
+        Thread zombieWaveThread = new Thread(() -> {
+            try {
+                // 获取当前关卡的僵尸类型配置
+                List<ZombieType> availableZombieTypes = getZombieTypesByLevel();
+
+                // 根据关卡决定生成的僵尸数量
+                int waveSize;
+                switch (level) {
+                    case 1:
+                        waveSize = 10; // 关卡1：生成5个僵尸
+                        break;
+                    case 2:
+                        waveSize = 15; // 关卡2：生成8个僵尸
+                        break;
+                    case 3:
+                        waveSize = 20; // 关卡3：生成12个僵尸
+                        break;
+                    default:
+                        waveSize = 5;
+                }
+
+                // 快速连续生成僵尸
+                for (int i = 0; i < waveSize; i++) {
+                    // 随机选择一个可用的僵尸类型，但排除旗帜僵尸（如果已经生成过）
+                    List<ZombieType> tempTypes = new ArrayList<>(availableZombieTypes);
+                    if (flagZombieSpawned && tempTypes.contains(ZombieType.FLAG)) {
+                        tempTypes.remove(ZombieType.FLAG); // 移除旗帜僵尸，避免再次生成
+                    }
+                    // 在进度达到50%之前，排除刚特尔和橄榄球僵尸
+                    if (!isHalfwayProgressReached) {
+                        tempTypes.remove(ZombieType.FOOTBALL);
+                        tempTypes.remove(ZombieType.GARGANTUAR);
+                        // 确保临时列表不为空
+                        if (tempTypes.isEmpty()) {
+                            // 如果移除后没有可用僵尸，至少保留普通僵尸
+                            tempTypes.add(ZombieType.NORMAL);
+                        }
+                    }
+                    // 对于最终僵尸潮，可以增加更强的僵尸出现概率
+                    ZombieType type;
+                    if (finalZombieWaveTriggered && random.nextBoolean()) {
+                        // 优先选择强力僵尸类型
+                        List<ZombieType> strongTypes = new ArrayList<>();
+                        for (ZombieType t : tempTypes) {
+                            if (t != ZombieType.NORMAL && t != ZombieType.FLAG) {
+                                strongTypes.add(t);
+                            }
+                        }
+                        if (!strongTypes.isEmpty()) {
+                            type = strongTypes.get(random.nextInt(strongTypes.size()));
+                        } else {
+                            type = tempTypes.get(random.nextInt(tempTypes.size()));
+                        }
+                    } else {
+                        type = tempTypes.get(random.nextInt(tempTypes.size()));
+                    }
+
+                    // 随机选择一个车道
+                    int laneIndex = random.nextInt(5);
+                    // 生成僵尸
+                    spawnZombie(type, laneIndex);
+                    // 间隔200-500毫秒生成下一个僵尸，营造连续进攻的感觉
+                    Thread.sleep(200 + random.nextInt(300));
+                }
+
+                // 最终僵尸潮结束后停止生成僵尸
+                if (finalZombieWaveTriggered) {
+                    stopSpawningZombies = true;
+                    if (gameLoopService instanceof GameLoopServiceImpl) {
+                        ((GameLoopServiceImpl) gameLoopService).setStopSpawningZombies(true);
+                    }
+                }
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+            }
+        });
+
+        zombieWaveThread.setDaemon(true);
+        zombieWaveThread.start();
+    }
+
 
 }

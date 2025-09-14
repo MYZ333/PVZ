@@ -23,19 +23,14 @@ public class GameLoopServiceImpl implements GameLoopService {
 
     @Override
     public void start() {
-        if (!running) {
+        if (gameThread == null || !gameThread.isAlive()) {
             running = true;
-            startTime = Instant.now();
+            stopSpawningZombies = false;
             gameThread = new Thread(this::gameLoop);
+            gameThread.setDaemon(true);
             gameThread.start();
-            
-            // 启动后立即生成一个僵尸，用于测试
-            System.out.println("游戏循环已启动，立即生成一个僵尸用于测试...");
-            if (spawnService != null) {
-                spawnService.spawnZombie();
-            } else {
-                System.out.println("警告: spawnService 未设置，无法生成僵尸！");
-            }
+
+            startTime = Instant.now();
         }
     }
     
@@ -117,10 +112,5 @@ public class GameLoopServiceImpl implements GameLoopService {
             System.out.println("游戏帧: " + frameCount + ", 运行时间: " + elapsedTime.toSeconds() + "秒");
         }
         
-        // 每30帧（约0.5秒）尝试生成一个僵尸，增加生成频率以便测试
-        if (spawnService != null && frameCount % 180 == 0 && !stopSpawningZombies) {
-            System.out.println("尝试生成僵尸...");
-            spawnService.spawnZombie();
-        }
     }
 }
