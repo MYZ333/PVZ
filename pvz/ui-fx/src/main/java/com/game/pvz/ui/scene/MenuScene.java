@@ -44,8 +44,8 @@ public class MenuScene extends Scene {
     private double startButtonImageScale = 1.48; // 默认放大1.2倍
     // 退出按钮图片视图
     private ImageView exitButtonView;
-    // 退出按钮图片的放大倍数
-    private double exitButtonImageScale = 1.31;
+    // 退出按钮图片的放大倍数（代码可控，可通过修改此值调整按钮大小）
+    private double exitButtonImageScale = 1.28;
     // 帮助按钮图片视图
     private ImageView helpButtonView;
     // 帮助按钮图片的放大倍数
@@ -520,7 +520,7 @@ public class MenuScene extends Scene {
         Button exitButton = new Button("");
         // 设置按钮大小以适应放大后的图片
         exitButton.setPrefSize(75 * this.exitButtonImageScale, 75 * this.exitButtonImageScale);
-        exitButton.setLayoutX(1061); // 退出游戏按钮X坐标
+        exitButton.setLayoutX(1062); // 退出游戏按钮X坐标
         exitButton.setLayoutY(749); // 退出游戏按钮Y坐标
         exitButton.setBackground(Background.EMPTY);
         exitButton.setBorder(Border.EMPTY);
