@@ -9,7 +9,7 @@ public enum ZombieType {
     CONEHEAD(10, 100, true, 200, 20, 1500),         // 路障僵尸
     BUCKETHEAD(10, 100, true, 400, 20, 1500),       // 铁桶僵尸
     FOOTBALL(15, 300, true, 700, 25, 1200),         // 橄榄球僵尸
-    GARGANTUAR(5, 3000, true, 2000, 1000, 1000);      // 巨人僵尸
+    GARGANTUAR(5, 3000, true, 2000, 1000, 2000);      // 巨人僵尸
     
     private final int speed;           // 移动速度
     private final int health;          // 基础血量
