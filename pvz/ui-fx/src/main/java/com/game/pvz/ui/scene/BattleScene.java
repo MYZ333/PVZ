@@ -27,6 +27,7 @@ import javafx.geometry.Insets;
 import javafx.geometry.Pos;
 import javafx.scene.Scene;
 import javafx.scene.control.Button;
+import javafx.scene.control.ProgressBar;
 import javafx.scene.image.Image;
 import javafx.scene.image.ImageView;
 import javafx.scene.layout.*;
@@ -86,7 +87,19 @@ public class BattleScene extends Scene {
     private boolean isShovelMode = false; // 铲子模式标志
     private Button shovelButton; // 铲子按钮
     private boolean gameOver = false;
+    // 添加进度条相关成员变量
+    private ProgressBar progressBar; // 游戏进度条
+    private double battleProgress = 0; // 当前进度（0-1）
+    private long battleStartTime; // 战斗开始时间
+    private boolean stopSpawningZombies = false; // 是否停止生成僵尸
+    private Button pauseButton; // 新增：暂停按钮
+    private boolean isPaused = false; // 新增：暂停状态标志
+    private Thread sunGenerationThread; // 添加阳光生成线程引用
 
+    // 根据关卡设置不同的战斗持续时间（毫秒）
+    private long getBattleDurationByLevel() {
+        return 10000; // 默认3分钟，可根据关卡调整
+    }
     public BattleScene(int level) {
         super(new Pane());
         this.level = level;
@@ -158,8 +171,12 @@ public class BattleScene extends Scene {
         battleStatusText = new Text("战斗准备中...");
         battleStatusText.setFont(Font.font("Arial", FontWeight.NORMAL, 16));
         battleStatusText.setFill(Color.WHITE);
-        
-        topBar.getChildren().addAll(levelText, sunAmountText, battleStatusText);
+        // 添加游戏进度条到顶部信息栏
+        progressBar = new ProgressBar(0);
+        progressBar.setPrefWidth(300);
+        progressBar.setStyle("-fx-accent: #2a9d8f;"); // 设置进度条颜色
+
+        topBar.getChildren().addAll(levelText, sunAmountText, battleStatusText, progressBar);
         
         // 游戏棋盘
         gameGrid = new GridPane();
@@ -340,8 +357,16 @@ public class BattleScene extends Scene {
             stopBattle();
             Router.getInstance().showLevelSelectScene();
         });
+        // 暂停按钮
+        pauseButton = new Button("暂停游戏");
+        pauseButton.setPrefSize(120, 40);
+        pauseButton.setFont(Font.font("Arial", FontWeight.NORMAL, 16));
+        pauseButton.setDisable(true); // 初始状态禁用
+        pauseButton.setOnAction(e -> {
+            pauseBattle();
+        });
         
-        buttonBar.getChildren().addAll(startButton, backButton);
+        buttonBar.getChildren().addAll(startButton, backButton, pauseButton);
 
         // 将所有元素添加到主布局
         mainLayout.getChildren().addAll(topBar, gameContainer, plantSelector, buttonBar);
@@ -422,14 +447,20 @@ public class BattleScene extends Scene {
             battleStatusText.setText("战斗进行中...");
             startButton.setDisable(true);
             startButton.setText("战斗中");
+            pauseButton.setDisable(false); // 启用暂停按钮
 
+            // 记录战斗开始时间
+            battleStartTime = System.currentTimeMillis();
+            battleProgress = 0;
+            stopSpawningZombies = false;
             // 启动游戏循环
             ((GameLoopServiceImpl) gameLoopService).setSpawnService(spawnService);
             gameLoopService.start();
 
-            // 开始自动生成阳光
-            new Thread(this::sunGenerationTask).start();
-
+            // 开始自动生成阳光，保存线程引用
+            sunGenerationThread = new Thread(this::sunGenerationTask);
+            sunGenerationThread.setDaemon(true); // 设置为守护线程，避免阻止程序退出
+            sunGenerationThread.start();
             // 直接创建并渲染一个僵尸，用于测试渲染逻辑
             System.out.println("直接创建并渲染一个测试僵尸...");
             Position position = new Position(984, 1 * 82 + 5); // 在第2个车道，使用与renderZombie相同的位置计算
@@ -535,14 +566,18 @@ public class BattleScene extends Scene {
     public void stopBattle() {
         if (battleStarted) {
             battleStarted = false;
+            isPaused = false; // 重置暂停标志
             gameOver = false; // 重置游戏结束状态
             battleStatusText.setText("战斗已停止");
             startButton.setDisable(false);
             startButton.setText("开始战斗");
-
-            // 停止游戏循环
+            pauseButton.setDisable(true); // 禁用暂停按钮
             gameLoopService.stop();
-
+            // 中断阳光生成线程
+            if (sunGenerationThread != null && sunGenerationThread.isAlive()) {
+                sunGenerationThread.interrupt();
+                sunGenerationThread = null;
+            }
             // 清空所有阳光
             javafx.application.Platform.runLater(() -> {
                 sunLayer.getChildren().clear();
@@ -675,14 +710,16 @@ public class BattleScene extends Scene {
      * 阳光自动生成任务
      */
     private void sunGenerationTask() {
-        while (battleStarted&& !gameOver) {
+        while (battleStarted&& !gameOver&& !isPaused) {
             try {
                 // 每5秒生成一些阳光
                 Thread.sleep(2000+random.nextInt(5000));
 
                 // 在JavaFX应用线程中更新UI
                 javafx.application.Platform.runLater(() -> {
-                    spawnSun();
+                    if (!isPaused) { // 再次检查暂停状态
+                        spawnSun();
+                    }
                 });
             } catch (InterruptedException e) {
                 Thread.currentThread().interrupt();
@@ -760,20 +797,40 @@ public class BattleScene extends Scene {
         timeline.setCycleCount(Timeline.INDEFINITE);
         timeline.play();
 
-        // 阳光自动消失的定时器
-        new Thread(() -> {
+        // 阳光自动消失的定时器 - 修改为考虑暂停状态
+        Thread sunThread = new Thread(() -> {
             try {
-                Thread.sleep(10000); // 10秒后自动消失
-                javafx.application.Platform.runLater(() -> {
-                    if (!sun.isCollected()) {
-                        sunLayer.getChildren().remove(sunVisual);
-                        activeSuns.remove(sun);
+                long startTime = System.currentTimeMillis();
+                long elapsedTime = 0;
+                // 总持续时间10秒
+                long totalDuration = 10000;
+
+                // 循环检查，直到达到总持续时间或阳光被收集或线程中断
+                while (elapsedTime < totalDuration && !sun.isCollected() && !Thread.currentThread().isInterrupted()) {
+                    if (!isPaused) {
+                        // 游戏未暂停时才增加已过时间
+                        elapsedTime = System.currentTimeMillis() - startTime;
                     }
-                });
+                    // 短暂睡眠，避免CPU占用过高
+                    Thread.sleep(100);
+                }
+
+                if (!Thread.currentThread().isInterrupted() && !sun.isCollected()) {
+                    javafx.application.Platform.runLater(() -> {
+                        if (!sun.isCollected()) {
+                            sunLayer.getChildren().remove(sunVisual);
+                            activeSuns.remove(sun);
+                            fallingSuns.remove(sun);
+                            sunTargetPositions.remove(sun);
+                        }
+                    });
+                }
             } catch (InterruptedException e) {
                 Thread.currentThread().interrupt();
             }
-        }).start();
+        });
+        sunThread.setDaemon(true);
+        sunThread.start();
     }
     /**
      * 收集阳光
@@ -799,7 +856,9 @@ public class BattleScene extends Scene {
         AnimationTimer timer = new AnimationTimer() {
             @Override
             public void handle(long now) {
-                if (battleStarted&& !gameOver) {
+                if (battleStarted&& !gameOver&& !isPaused) {
+                    // 更新游戏进度
+                    updateBattleProgress();
                     // 更新僵尸位置
                     updateZombies();
 
@@ -809,6 +868,9 @@ public class BattleScene extends Scene {
 
                     // 更新子弹位置
                     updateProjectiles();
+
+                    // 检查游戏胜利条件
+                    checkGameVictory();
                 }
             }
         };
@@ -1046,7 +1108,7 @@ public class BattleScene extends Scene {
             }
 
             // 处理向日葵生产阳光
-            if (plant.produceSun(now)) {
+            if (!isPaused && plant.produceSun(now)) {
                 System.out.println("向日葵生产阳光！位置: " + plant.getPosition().x() + ", " + plant.getPosition().y());
                 // 向日葵生产了阳光，在植物位置上方生成阳光
                 spawnSunAtPosition(plant.getPosition().x()+150, plant.getPosition().y());
@@ -1120,20 +1182,38 @@ public class BattleScene extends Scene {
 
         battleStatusText.setText("阳光出现了！");
 
-        // 阳光自动消失的定时器
-        new Thread(() -> {
+        // 阳光自动消失的定时器 - 修改为考虑暂停状态
+        Thread sunThread = new Thread(() -> {
             try {
-                Thread.sleep(10000); // 10秒后自动消失
-                javafx.application.Platform.runLater(() -> {
-                    if (!sun.isCollected()) {
-                        sunLayer.getChildren().remove(sunVisual);
-                        activeSuns.remove(sun);
+                long startTime = System.currentTimeMillis();
+                long elapsedTime = 0;
+                // 总持续时间10秒
+                long totalDuration = 10000;
+
+                // 循环检查，直到达到总持续时间或阳光被收集或线程中断
+                while (elapsedTime < totalDuration && !sun.isCollected() && !Thread.currentThread().isInterrupted()) {
+                    if (!isPaused) {
+                        // 游戏未暂停时才增加已过时间
+                        elapsedTime = System.currentTimeMillis() - startTime;
                     }
-                });
+                    // 短暂睡眠，避免CPU占用过高
+                    Thread.sleep(100);
+                }
+
+                if (!Thread.currentThread().isInterrupted() && !sun.isCollected()) {
+                    javafx.application.Platform.runLater(() -> {
+                        if (!sun.isCollected()) {
+                            sunLayer.getChildren().remove(sunVisual);
+                            activeSuns.remove(sun);
+                        }
+                    });
+                }
             } catch (InterruptedException e) {
                 Thread.currentThread().interrupt();
             }
-        }).start();
+        });
+        sunThread.setDaemon(true);
+        sunThread.start();
     }
 
     // 添加新方法：渲染子弹
@@ -1407,15 +1487,21 @@ public class BattleScene extends Scene {
 
         // 重置游戏状态
         battleStarted = false;
+        isPaused = false; // 重置暂停标志
         gameOver = false;
         selectedPlantType = null;
         isShovelMode = false;
-
+        stopSpawningZombies = false;
+        // 确保GameLoopService也重置停止生成僵尸的状态
+        if (gameLoopService instanceof GameLoopServiceImpl) {
+            ((GameLoopServiceImpl) gameLoopService).setStopSpawningZombies(false);
+        }
         // 重置UI状态
         battleStatusText.setText("战斗准备中...");
         startButton.setDisable(false);
         startButton.setText("开始战斗");
         shovelButton.setStyle("-fx-background-color: #6c757d; -fx-text-fill: white;");
+        progressBar.setProgress(0); // 重置进度条
 
         // 清空植物网格
         for (Pane cell : plantCells.values()) {
@@ -1445,6 +1531,215 @@ public class BattleScene extends Scene {
             carts.add(cart);
             renderCart(cart);
         }
+    }
+    /**
+     * 更新游戏进度
+     */
+    private void updateBattleProgress() {
+        if (!battleStarted || gameOver) {
+            return;
+        }
+
+        long currentTime = System.currentTimeMillis();
+        long elapsedTime = currentTime - battleStartTime;
+        long battleDuration = getBattleDurationByLevel();
+
+        // 计算进度（0-1）
+        battleProgress = Math.min((double) elapsedTime / battleDuration, 1.0);
+        progressBar.setProgress(battleProgress);
+
+        // 当进度达到100%时，停止生成僵尸
+        if (battleProgress >= 1.0 && !stopSpawningZombies) {
+            stopSpawningZombies = true;
+            // 调用GameLoopServiceImpl中的方法停止生成僵尸
+            if (gameLoopService instanceof GameLoopServiceImpl) {
+                ((GameLoopServiceImpl) gameLoopService).setStopSpawningZombies(true);
+            }
+            battleStatusText.setText("僵尸生成已停止！消灭所有剩余僵尸获胜！");
+            System.out.println("战斗进度已满，停止生成僵尸");
+        }
+    }
+
+    /**
+     * 检查游戏胜利条件
+     */
+    private void checkGameVictory() {
+        // 条件1：进度条已满（不再生成僵尸）
+        // 条件2：所有僵尸已被消灭
+        if (stopSpawningZombies && zombies.isEmpty()) {
+            gameOver = true;
+            showGameVictoryDialog();
+        }
+    }
+    /**
+     * 显示游戏胜利对话框
+     */
+    private void showGameVictoryDialog() {
+        // 停止游戏
+        stopBattle();
+
+        // 创建一个半透明的遮罩层
+        Pane overlay = new Pane();
+        overlay.setPrefSize(1200, 700);
+        overlay.setStyle("-fx-background-color: rgba(0, 0, 0, 0.7);");
+        overlay.setMouseTransparent(false);
+
+        // 创建游戏胜利对话框
+        VBox gameVictoryBox = new VBox(20);
+        gameVictoryBox.setAlignment(Pos.CENTER);
+        gameVictoryBox.setPrefSize(400, 300);
+        gameVictoryBox.setStyle("-fx-background-color: #283618; -fx-border-color: #bc6c25; -fx-border-width: 3; -fx-padding: 20;");
+        gameVictoryBox.setLayoutX((1200 - 400) / 2);
+        gameVictoryBox.setLayoutY((700 - 300) / 2);
+
+        // 游戏胜利文本
+        Text gameVictoryText = new Text("游戏胜利！");
+        gameVictoryText.setFont(Font.font("Arial", FontWeight.BOLD, 32));
+        gameVictoryText.setFill(Color.GREEN);
+
+        // 创建按钮容器
+        HBox buttonBox = new HBox(20);
+        buttonBox.setAlignment(Pos.CENTER);
+
+        // 返回选关按钮
+        Button backToLevelSelectButton = new Button("返回选关");
+        backToLevelSelectButton.setPrefSize(120, 40);
+        backToLevelSelectButton.setFont(Font.font("Arial", FontWeight.NORMAL, 16));
+        backToLevelSelectButton.setOnAction(e -> {
+            // 移除遮罩层和对话框
+            ((Pane) getRoot()).getChildren().remove(overlay);
+            // 跳转到选关界面
+            Router.getInstance().showLevelSelectScene();
+        });
+
+        // 开始下一关按钮 - 修改自"重新游戏"按钮
+        Button nextLevelButton = new Button("开始下一关");
+        nextLevelButton.setPrefSize(120, 40);
+        nextLevelButton.setFont(Font.font("Arial", FontWeight.NORMAL, 16));
+        nextLevelButton.setOnAction(e -> {
+            // 移除遮罩层和对话框
+            ((Pane) getRoot()).getChildren().remove(overlay);
+            // 跳转到下一个关卡
+            Router.getInstance().showBattleScene(level + 1);
+        });
+
+        buttonBox.getChildren().addAll(backToLevelSelectButton, nextLevelButton);
+        gameVictoryBox.getChildren().addAll(gameVictoryText, buttonBox);
+        overlay.getChildren().add(gameVictoryBox);
+
+        // 将遮罩层添加到场景根节点
+        ((Pane) getRoot()).getChildren().add(overlay);
+    }
+    /**
+     * 暂停游戏
+     */
+    private void pauseBattle() {
+        if (battleStarted && !gameOver && !isPaused) {
+            isPaused = true;
+            // 中断阳光生成线程
+            if (sunGenerationThread != null && sunGenerationThread.isAlive()) {
+                sunGenerationThread.interrupt();
+                sunGenerationThread = null;
+            }
+            // 暂停游戏循环
+            gameLoopService.stop();
+            // 显示暂停对话框
+            showPauseDialog();
+        }
+    }
+
+    /**
+     * 恢复游戏
+     */
+    private void resumeBattle() {
+        if (isPaused) {
+            isPaused = false;
+            // 重新启动游戏循环
+            ((GameLoopServiceImpl) gameLoopService).setSpawnService(spawnService);
+            gameLoopService.start();
+            // 重新启动阳光生成线程
+            sunGenerationThread = new Thread(this::sunGenerationTask);
+            sunGenerationThread.setDaemon(true);
+            sunGenerationThread.start();
+            // 隐藏暂停对话框
+            Pane root = (Pane) getRoot();
+            for (javafx.scene.Node node : root.getChildren()) {
+                if (node.getId() != null && node.getId().equals("pause-overlay")) {
+                    root.getChildren().remove(node);
+                    break;
+                }
+            }
+        }
+    }
+
+    /**
+     * 显示暂停对话框
+     */
+    private void showPauseDialog() {
+
+        // 创建一个半透明的遮罩层
+        Pane overlay = new Pane();
+        overlay.setPrefSize(1200, 700);
+        overlay.setStyle("-fx-background-color: rgba(0, 0, 0, 0.7);");
+        overlay.setMouseTransparent(false);
+
+        // 创建暂停对话框
+        VBox pauseBox = new VBox(20);
+        pauseBox.setAlignment(Pos.CENTER);
+        pauseBox.setPrefSize(400, 300);
+        pauseBox.setStyle("-fx-background-color: #283618; -fx-border-color: #bc6c25; -fx-border-width: 3; -fx-padding: 20;");
+        pauseBox.setLayoutX((1200 - 400) / 2);
+        pauseBox.setLayoutY((700 - 300) / 2);
+
+        // 暂停文本
+        Text pauseText = new Text("游戏已暂停");
+        pauseText.setFont(Font.font("Arial", FontWeight.BOLD, 32));
+        pauseText.setFill(Color.YELLOW);
+
+        // 创建按钮容器
+        VBox buttonBox = new VBox(20);
+        buttonBox.setAlignment(Pos.CENTER);
+
+        // 继续游戏按钮
+        Button resumeButton = new Button("继续游戏");
+        resumeButton.setPrefSize(180, 40);
+        resumeButton.setFont(Font.font("Arial", FontWeight.NORMAL, 16));
+        resumeButton.setOnAction(e -> {
+            // 移除遮罩层和对话框
+            ((Pane) getRoot()).getChildren().remove(overlay);
+            // 恢复游戏
+            resumeBattle();
+        });
+
+        // 重新游戏按钮
+        Button restartButton = new Button("重新游戏");
+        restartButton.setPrefSize(180, 40);
+        restartButton.setFont(Font.font("Arial", FontWeight.NORMAL, 16));
+        restartButton.setOnAction(e -> {
+            // 移除遮罩层和对话框
+            ((Pane) getRoot()).getChildren().remove(overlay);
+            // 重新开始当前关卡
+            restartLevel();
+        });
+
+        // 返回选关按钮
+        Button backToLevelSelectButton = new Button("返回选关");
+        backToLevelSelectButton.setPrefSize(180, 40);
+        backToLevelSelectButton.setFont(Font.font("Arial", FontWeight.NORMAL, 16));
+        backToLevelSelectButton.setOnAction(e -> {
+            // 移除遮罩层和对话框
+            ((Pane) getRoot()).getChildren().remove(overlay);
+            // 跳转到选关界面
+            stopBattle();
+            Router.getInstance().showLevelSelectScene();
+        });
+
+        buttonBox.getChildren().addAll(resumeButton, restartButton, backToLevelSelectButton);
+        pauseBox.getChildren().addAll(pauseText, buttonBox);
+        overlay.getChildren().add(pauseBox);
+
+        // 将遮罩层添加到场景根节点
+        ((Pane) getRoot()).getChildren().add(overlay);
     }
 
 }

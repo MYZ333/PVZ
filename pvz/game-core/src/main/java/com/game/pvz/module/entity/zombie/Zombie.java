@@ -195,18 +195,23 @@ public class Zombie implements GameObject {
      */
     public void takeDamage(int damage) {
         boolean armorHit = hasArmor && armorHealth > 0;
-        
+        int remainingDamage = damage;
         // 如果有护甲，先减少护甲生命值
         if (armorHit) {
-            armorHealth -= damage;
+            // 计算护甲能吸收的伤害
+            int armorAbsorb = Math.min(armorHealth, damage);
+            armorHealth -= armorAbsorb;
+            remainingDamage = damage - armorAbsorb;
+
             if (armorHealth <= 0) {
                 hasArmor = false;
                 // 护甲被破坏时可能有特殊效果
                 onArmorDestroyed();
             }
-        } else {
-            // 没有护甲，直接减少生命值
-            this.health = this.health.takeDamage(damage);
+        }
+        // 将剩余伤害应用到基础生命值
+        if (remainingDamage > 0) {
+            this.health = this.health.takeDamage(remainingDamage);
         }
         
         // 发布僵尸受到伤害事件

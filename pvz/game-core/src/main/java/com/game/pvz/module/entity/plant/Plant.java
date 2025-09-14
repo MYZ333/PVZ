@@ -230,8 +230,9 @@ public class Plant implements GameObject {
             double distance = position.distance(zombie.getPosition());
             System.out.println("僵尸ID: " + zombie.getId() + ", 位置: (" + zombie.getPosition().x() + ", " + zombie.getPosition().y() + "), 距离: " + distance);
             if (distance <= explosionRadius) {
-                // 造成10000点伤害
-                zombie.takeDamage(1000);
+                // 确保造成10000点伤害
+                int damageAmount = 10000;
+                zombie.takeDamage(damageAmount);
                 System.out.println("樱桃炸弹命中僵尸！ID: " + zombie.getId() + ", 造成10000点伤害，剩余生命值: " + zombie.getHealth().current() + ", 僵尸类型: " + zombie.getType().name());
             } else {
                 System.out.println("僵尸在爆炸范围外，ID: " + zombie.getId() + ", 距离: " + distance);
