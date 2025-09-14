@@ -19,18 +19,22 @@ public class GameLoopServiceImpl implements GameLoopService {
     private long frameCount = 0;
     private Instant startTime;
     private SpawnService spawnService;
-    private boolean stopSpawningZombies = false; // 新增：控制是否停止生成僵尸
-
+    
     @Override
     public void start() {
-        if (gameThread == null || !gameThread.isAlive()) {
+        if (!running) {
             running = true;
-            stopSpawningZombies = false;
-            gameThread = new Thread(this::gameLoop);
-            gameThread.setDaemon(true);
-            gameThread.start();
-
             startTime = Instant.now();
+            gameThread = new Thread(this::gameLoop);
+            gameThread.start();
+            
+            // 启动后立即生成一个僵尸，用于测试
+            System.out.println("游戏循环已启动，立即生成一个僵尸用于测试...");
+            if (spawnService != null) {
+                spawnService.spawnZombie();
+            } else {
+                System.out.println("警告: spawnService 未设置，无法生成僵尸！");
+            }
         }
     }
     
@@ -59,16 +63,7 @@ public class GameLoopServiceImpl implements GameLoopService {
     public void setSpawnService(SpawnService spawnService) {
         this.spawnService = spawnService;
     }
-    // 新增：设置是否停止生成僵尸的方法
-    public void setStopSpawningZombies(boolean stopSpawning) {
-        this.stopSpawningZombies = stopSpawning;
-        System.out.println(stopSpawning ? "已停止生成僵尸" : "已恢复生成僵尸");
-    }
-
-    // 新增：获取当前是否停止生成僵尸的状态
-    public boolean isStopSpawningZombies() {
-        return stopSpawningZombies;
-    }
+    
     private void gameLoop() {
         final long targetTime = 1000 / updateRate;
         
@@ -112,5 +107,10 @@ public class GameLoopServiceImpl implements GameLoopService {
             System.out.println("游戏帧: " + frameCount + ", 运行时间: " + elapsedTime.toSeconds() + "秒");
         }
         
+        // 每30帧（约0.5秒）尝试生成一个僵尸，增加生成频率以便测试
+        if (spawnService != null && frameCount % 180 == 0) {
+            System.out.println("尝试生成僵尸...");
+            spawnService.spawnZombie();
+        }
     }
 }

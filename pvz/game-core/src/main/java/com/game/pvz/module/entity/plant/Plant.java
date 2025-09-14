@@ -154,11 +154,11 @@ public class Plant implements GameObject {
                 if (target != null) {
                     System.out.println("找到目标僵尸，准备发射子弹！位置: " + target.getPosition().x() + ", " + target.getPosition().y());
                     // 普通豌豆射手发射一颗子弹
-                    projectiles.add(createProjectile(false));
+                    projectiles.add(createProjectile());
 
                     // 双发射手发射两颗子弹
                     if (type == PlantType.REPEATER) {
-                        projectiles.add(createProjectile(true));
+                        projectiles.add(createProjectile());
                     }
 
                     // 更新最后攻击时间
@@ -176,11 +176,9 @@ public class Plant implements GameObject {
      * 创建子弹
      * @return 创建的子弹
      */
-    private Projectile createProjectile(boolean isSecond) {
+    private Projectile createProjectile() {
         // 子弹从植物前方发射
-
-        double xOffset = isSecond ? 20 : 0; // 第二颗子弹略微向上偏移
-        Position projectilePos = new Position(position.x() + 105 + xOffset, position.y());
+        Position projectilePos = new Position(position.x() + 105, position.y());
 
         // 根据植物类型确定子弹类型
         ProjectileType projectileType = ProjectileType.PEANUT;
@@ -222,28 +220,21 @@ public class Plant implements GameObject {
      * 樱桃炸弹爆炸，对范围内的所有僵尸造成伤害
      */
     private void explode(List<Zombie> zombies) {
-        // 获取樱桃炸弹所在的网格位置
-        int plantGridX = (int)(position.x() / 82); // 假设每个网格宽度为82
-        int plantGridY = (int)(position.y() / 82); // 假设每个网格高度为82
+        // 爆炸半径
+        int explosionRadius = 200; // 爆炸范围扩大一倍
 
-        System.out.println("樱桃炸弹爆炸！植物位置: (" + position.x() + ", " + position.y() + "), 网格位置: (" + plantGridX + ", " + plantGridY + ")");
+        System.out.println("樱桃炸弹爆炸！植物位置: (" + position.x() + ", " + position.y() + "), 爆炸半径: " + explosionRadius);
 
         // 对范围内的所有僵尸造成伤害
         for (Zombie zombie : zombies) {
-            // 计算僵尸所在的网格位置
-            int zombieGridX = (int)(zombie.getPosition().x() / 82);
-            int zombieGridY = (int)(zombie.getPosition().y() / 82);
-
-            System.out.println("僵尸ID: " + zombie.getId() + ", 位置: (" + zombie.getPosition().x() + ", " + zombie.getPosition().y() + "), 网格位置: (" + zombieGridX + ", " + zombieGridY + ")");
-
-            // 检查僵尸是否在3x3范围内
-            if (Math.abs(zombieGridX - plantGridX) <= 1 && Math.abs(zombieGridY - plantGridY) <= 1) {
-                // 确保造成10000点伤害（足够消灭所有类型的僵尸）
-                int damageAmount = 10000;
-                zombie.takeDamage(damageAmount);
-                System.out.println("樱桃炸弹命中僵尸！ID: " + zombie.getId() + ", 造成" + damageAmount + "点伤害，剩余生命值: " + zombie.getHealth().current() + ", 僵尸类型: " + zombie.getType().name());
+            double distance = position.distance(zombie.getPosition());
+            System.out.println("僵尸ID: " + zombie.getId() + ", 位置: (" + zombie.getPosition().x() + ", " + zombie.getPosition().y() + "), 距离: " + distance);
+            if (distance <= explosionRadius) {
+                // 造成10000点伤害
+                zombie.takeDamage(1000);
+                System.out.println("樱桃炸弹命中僵尸！ID: " + zombie.getId() + ", 造成10000点伤害，剩余生命值: " + zombie.getHealth().current() + ", 僵尸类型: " + zombie.getType().name());
             } else {
-                System.out.println("僵尸在爆炸范围外，ID: " + zombie.getId() + ", 不在3x3网格范围内");
+                System.out.println("僵尸在爆炸范围外，ID: " + zombie.getId() + ", 距离: " + distance);
             }
         }
     }
@@ -264,8 +255,8 @@ public class Plant implements GameObject {
      */
     private long getAttackCooldown() {
         switch (type) {
-            case PEASHOOTER -> { return 2500; } // 1.5秒
-            case REPEATER -> { return 2500; }   // 1.5秒
+            case PEASHOOTER -> { return 1500; } // 1.5秒
+            case REPEATER -> { return 1500; }   // 1.5秒
             case SUNFLOWER, WALLNUT, CHERRY_BOMB -> { return Long.MAX_VALUE; } // 这些植物没有攻击冷却
             default -> { return 1000; }        // 默认1秒
         }

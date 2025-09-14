@@ -42,6 +42,6 @@ public class SunLabel extends Label {
     }
     
     private void updateText() {
-        setText("" + sunAmount);
+        setText("阳光: " + sunAmount);
     }
 }
