@@ -19,6 +19,7 @@ public class GameLoopServiceImpl implements GameLoopService {
     private long frameCount = 0;
     private Instant startTime;
     private SpawnService spawnService;
+
     private boolean stopSpawningZombies = false; // 新增：控制是否停止生成僵尸
 
     @Override
@@ -59,6 +60,7 @@ public class GameLoopServiceImpl implements GameLoopService {
     public void setSpawnService(SpawnService spawnService) {
         this.spawnService = spawnService;
     }
+
     // 新增：设置是否停止生成僵尸的方法
     public void setStopSpawningZombies(boolean stopSpawning) {
         this.stopSpawningZombies = stopSpawning;
@@ -69,6 +71,7 @@ public class GameLoopServiceImpl implements GameLoopService {
     public boolean isStopSpawningZombies() {
         return stopSpawningZombies;
     }
+
     private void gameLoop() {
         final long targetTime = 1000 / updateRate;
         
@@ -112,5 +115,6 @@ public class GameLoopServiceImpl implements GameLoopService {
             System.out.println("游戏帧: " + frameCount + ", 运行时间: " + elapsedTime.toSeconds() + "秒");
         }
         
+
     }
 }
