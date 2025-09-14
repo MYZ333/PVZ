@@ -80,7 +80,18 @@ public class BattleScene extends Scene {
     private Map<UUID, ImageView> zombieViews = new HashMap<>(); // 僵尸视图映射
     private Map<UUID, Pane> zombieContainers = new HashMap<>(); // 僵尸容器映射
     private Map<Projectile, Pane> projectileViews = new HashMap<>(); // 子弹视图映射，直接使用Projectile对象作为键
-    private Map<PlantType, String> plantImagePaths = new HashMap<>(); // 植物图片路径映射
+
+    private Map<PlantType, String> plantImagePaths = new HashMap<>();
+    
+    // 植物按钮大小控制参数
+    private double plantButtonWidth; // 植物按钮宽度
+    private double plantButtonHeight; // 植物按钮高度
+    private double plantButtonSpacing; // 植物按钮间距
+    private double plantSelectorPadding; // 植物选择栏内边距
+    private double plantSelectorX; // 植物选择栏X坐标
+    private double plantSelectorY; // 植物选择栏Y坐标
+    
+    private Map<PlantType, ImageView> plantButtonViews = new HashMap<>(); // 植物按钮视图映射，用于控制选中状态
     private final Map<Sun, Double> sunTargetPositions = new HashMap<>(); // 阳光目标位置映射
     private SpawnService spawnService; // 僵尸生成服务
     private StackPane gameContainer; // 添加gameContainer作为类成员变量
@@ -139,7 +150,7 @@ public class BattleScene extends Scene {
         Pane root = (Pane) getRoot();
 
         // 添加背景图片
-        Image backgroundImage = ResourcePool.getInstance().getImage("/pic/background02.png");
+        Image backgroundImage = ResourcePool.getInstance().getImage("/pic/111.png");
         if (backgroundImage != null) {
             ImageView backgroundView = new ImageView(backgroundImage);
             backgroundView.setFitWidth(1200);
@@ -151,12 +162,20 @@ public class BattleScene extends Scene {
             root.setStyle("-fx-background-color: #606c38;");
         }
 
-        // 初始化植物图片路径映射（先空着，后续可以填充实际路径）
-        plantImagePaths.put(PlantType.SUNFLOWER, ""); // 向日葵图片路径
-        plantImagePaths.put(PlantType.PEASHOOTER, ""); // 豌豆射手图片路径
-        plantImagePaths.put(PlantType.WALLNUT, ""); // 坚果墙图片路径
-        plantImagePaths.put(PlantType.CHERRY_BOMB, ""); // 樱桃炸弹图片路径
-        plantImagePaths.put(PlantType.REPEATER, ""); // 双发射手图片路径
+        // 初始化植物图片路径映射
+        plantImagePaths.put(PlantType.SUNFLOWER, "/pic/xiang.png"); // 向日葵图片路径
+        plantImagePaths.put(PlantType.PEASHOOTER, "/pic/shouter.png"); // 豌豆射手图片路径
+        plantImagePaths.put(PlantType.WALLNUT, "/pic/jianguo.png"); // 坚果墙图片路径
+        plantImagePaths.put(PlantType.CHERRY_BOMB, "/pic/boom.png"); // 樱桃炸弹图片路径
+        plantImagePaths.put(PlantType.REPEATER, "/pic/double.png"); // 双发射手图片路径
+        
+        // 植物按钮大小和间距设置
+        this.plantButtonWidth = 93; // 植物按钮宽度（缩小按钮本体）
+        this.plantButtonHeight = 105; // 植物按钮高度（缩小按钮本体）
+        this.plantButtonSpacing = -15; // 植物按钮间距（已减小）
+        this.plantSelectorPadding = 10; // 植物选择栏内边距
+        this.plantSelectorX = 100; // 植物选择栏X坐标
+        this.plantSelectorY = 490; // 植物选择栏Y坐标
         
         // 注册僵尸生成事件监听器
         registerZombieSpawnListener();
@@ -175,7 +194,7 @@ public class BattleScene extends Scene {
         HBox topBar = new HBox(20);
         topBar.setAlignment(Pos.CENTER_LEFT);
         topBar.setPadding(new Insets(5));
-        topBar.setStyle("-fx-background-color: #283618;");
+        //topBar.setStyle("-fx-background-color: #283618;");
         
         // 关卡信息
         Text levelText = new Text("关卡 " + level);
@@ -183,9 +202,9 @@ public class BattleScene extends Scene {
         levelText.setFill(Color.WHITE);
         
         // 阳光数量显示
-        sunAmountText = new Text("阳光: " + sunBankService.getSunAmount());
-        sunAmountText.setFont(Font.font("Arial", FontWeight.NORMAL, 16));
-        sunAmountText.setFill(Color.YELLOW);
+        sunAmountText = new Text("       " + sunBankService.getSunAmount());
+        sunAmountText.setFont(Font.font("Arial", FontWeight.BOLD, 20));
+        sunAmountText.setFill(Color.BLACK);
         
         // 战斗状态显示
         battleStatusText = new Text("战斗准备中...");
@@ -196,13 +215,13 @@ public class BattleScene extends Scene {
         progressBar.setPrefWidth(300);
         progressBar.setStyle("-fx-accent: #2a9d8f;"); // 设置进度条颜色
 
-        topBar.getChildren().addAll(levelText, sunAmountText, battleStatusText, progressBar);
-        
+        topBar.getChildren().addAll(levelText, battleStatusText, progressBar);
+     
         // 游戏棋盘
         gameGrid = new GridPane();
         gameGrid.setHgap(2);
         gameGrid.setVgap(2);
-     gameGrid.setAlignment(Pos.TOP_LEFT);
+        gameGrid.setAlignment(Pos.TOP_LEFT);
 
         
         // 创建5x12的游戏网格（5行12列）
@@ -240,7 +259,7 @@ public class BattleScene extends Scene {
 
         zombieLayer.setPrefSize(984, 500);
 
-       zombieLayer.setMouseTransparent(false);
+        zombieLayer.setMouseTransparent(false);
 
         // 创建子弹层，用于显示子弹
         projectileLayer = new Pane();
@@ -309,10 +328,10 @@ public class BattleScene extends Scene {
         });
 
         // 植物选择栏
-        plantSelector = new HBox(10);
+        plantSelector = new HBox(plantButtonSpacing);
         plantSelector.setAlignment(Pos.CENTER);
-        plantSelector.setPadding(new Insets(10));
-        plantSelector.setStyle("-fx-background-color: #283618;");
+        plantSelector.setPadding(new Insets(plantSelectorPadding));
+        //plantSelector.setStyle("-fx-background-color: #283618;");
         
         // 添加可选植物按钮
         addPlantButton(PlantType.SUNFLOWER);
@@ -321,36 +340,32 @@ public class BattleScene extends Scene {
         addPlantButton(PlantType.CHERRY_BOMB);
         addPlantButton(PlantType.REPEATER);
         // 添加铲子按钮
-        shovelButton = new Button("铲子");
-        shovelButton.setPrefSize(80, 150);
+        shovelButton = new Button("");
+        shovelButton.setPrefSize(100, 100); // 改为80*80大小
         shovelButton.setFont(Font.font("Arial", FontWeight.BOLD, 12));
-        shovelButton.setStyle("-fx-background-color: #6c757d; -fx-text-fill: white;");
-
-        VBox shovelBox = new VBox(5);
-        shovelBox.setAlignment(Pos.CENTER);
-        shovelBox.getChildren().add(shovelButton);
-        plantSelector.getChildren().add(shovelBox);
+        shovelButton.setStyle("-fx-background-color: transparent; -fx-text-fill: white;");
+        // 设置铲子按钮向右移动150px（比原来多移100px），再额外右移20px，然后左移15px，再左移5px
+        HBox.setMargin(shovelButton, new Insets(0, 0, 0, 110));
+        plantSelector.getChildren().add(shovelButton);
         // 设置铲子按钮点击事件
         shovelButton.setOnAction(e -> {
             if (battleStarted) {
                 isShovelMode = !isShovelMode;
                 if (isShovelMode) {
-                    shovelButton.setStyle("-fx-background-color: #fefae0; -fx-text-fill: #6c757d;");
-                    battleStatusText.setText("已选择铲子，请点击植物铲除");
+                        shovelButton.setStyle("-fx-background-color: transparent;");
+                        battleStatusText.setText("已选择铲子，请点击植物铲除");
                     selectedPlantType = null; // 取消植物选择
                     // 恢复植物按钮样式
+                    // 恢复植物按钮样式
                     for (javafx.scene.Node node : plantSelector.getChildren()) {
-                        if (node instanceof VBox) {
-                            VBox box = (VBox) node;
-                            if (box.getChildren().size() > 0 && box.getChildren().get(0) instanceof Button && box != shovelBox) {
-                                Button btn = (Button) box.getChildren().get(0);
-                                btn.setStyle("-fx-background-color: #bc6c25; -fx-text-fill: white;");
-                            }
+                        if (node instanceof Button && node != shovelButton && node != pauseButton) {
+                            Button btn = (Button) node;
+                            btn.setStyle("-fx-background-color: #bc6c25; -fx-text-fill: white;");
                         }
                     }
                 } else {
-                    shovelButton.setStyle("-fx-background-color: #6c757d; -fx-text-fill: white;");
-                    battleStatusText.setText("已取消铲子模式");
+                        shovelButton.setStyle("-fx-background-color: transparent; -fx-text-fill: white;");
+                        battleStatusText.setText("已取消铲子模式");
                 }
             } else {
                 battleStatusText.setText("请先开始战斗！");
@@ -377,22 +392,50 @@ public class BattleScene extends Scene {
             stopBattle();
             Router.getInstance().showLevelSelectScene();
         });
-        // 暂停按钮
-        pauseButton = new Button("暂停游戏");
-        pauseButton.setPrefSize(120, 40);
-        pauseButton.setFont(Font.font("Arial", FontWeight.NORMAL, 16));
+        // 暂停按钮 - 移到铲子按钮右侧
+        pauseButton = new Button("");
+        pauseButton.setPrefSize(100, 100); // 与铲子按钮相同大小
+        pauseButton.setFont(Font.font("Arial", FontWeight.BOLD, 12));
+        pauseButton.setStyle("-fx-background-color: transparent;");
         pauseButton.setDisable(true); // 初始状态禁用
+        // 设置暂停按钮位置，与铲子按钮之间保持10px的间距，再左移195px（分四次左移：50px+50px+80px+15px）
+        HBox.setMargin(pauseButton, new Insets(0, 0, 0, 30)); // 110 + 100 + 10 - 195 = 30
         pauseButton.setOnAction(e -> {
             pauseBattle();
         });
+        plantSelector.getChildren().add(pauseButton); // 直接添加到植物选择栏中
         
-        buttonBar.getChildren().addAll(startButton, backButton, pauseButton);
+        buttonBar.getChildren().addAll(startButton, backButton); // 不再包含暂停按钮
+        
+        // 直接设置按钮栏的垂直位置，使其向下移动更多距离
+        buttonBar.setLayoutY(80); // 向下移动80px
 
-        // 将所有元素添加到主布局
-        mainLayout.getChildren().addAll(topBar, gameContainer, plantSelector, buttonBar);
+        // 创建阳光显示容器
+        Pane sunDisplayContainer = new Pane();
+        sunDisplayContainer.setPrefSize(200, 50);
+        sunDisplayContainer.setLayoutX(10);
+        sunDisplayContainer.setLayoutY(595); // 向下移动600px
+        sunDisplayContainer.getChildren().add(sunAmountText);
+        sunDisplayContainer.setMouseTransparent(true); // 避免遮挡其他UI元素
+        
+        // 添加一个空白占位元素，使按钮栏向下移动100px
+        Region spacer = new Region();
+        spacer.setPrefHeight(100);
+        
+        // 将除了plantSelector之外的元素添加到主布局
+        mainLayout.getChildren().addAll(topBar, gameContainer, spacer, buttonBar);
+      
         // 添加这一行代码，确保gameContainer在水平方向上居中
         mainLayout.setAlignment(Pos.TOP_CENTER);
+        
+        // 设置植物选择栏的绝对位置
+        plantSelector.setLayoutX(plantSelectorX);
+        plantSelector.setLayoutY(plantSelectorY);
+        
+        // 将所有元素添加到根容器
         root.getChildren().add(mainLayout);
+        root.getChildren().add(sunDisplayContainer);
+        root.getChildren().add(plantSelector);
     }
     
     /**
@@ -401,15 +444,31 @@ public class BattleScene extends Scene {
     private void addPlantButton(PlantType type) {
         VBox plantBox = new VBox(5);
         plantBox.setAlignment(Pos.CENTER);
-        // 使用PlantCard代替普通Button
+
+        // 创建PlantCard对象，而不是普通Button
         PlantCard plantCard = new PlantCard(type.name(), type.getCost());
+        plantCard.setPrefSize(plantButtonWidth, plantButtonHeight);
+        plantCard.setStyle("-fx-background-color: #bc6c25; -fx-text-fill: white;");
 
-        // 阳光成本显示
-        Text costText = new Text("" + type.getCost());
-        costText.setFont(Font.font("Arial", FontWeight.BOLD, 14));
-        costText.setFill(Color.YELLOW);
+        // 加载植物图片
+        String imagePath = plantImagePaths.get(type);
+        if (imagePath != null && !imagePath.isEmpty()) {
+            Image plantImage = ResourcePool.getInstance().getImage(imagePath);
+            if (plantImage != null) {
+                ImageView imageView = new ImageView(plantImage);
+                imageView.setFitWidth(plantButtonWidth); // 图片宽度与按钮宽度一致
+                imageView.setFitHeight(plantButtonHeight - 20); // 图片高度比按钮高度小20px，保持适当边距
+                imageView.setPreserveRatio(true);
+                plantCard.setGraphic(imageView); // 设置PlantCard的图标为植物图片
 
-        plantBox.getChildren().addAll(plantCard, costText);
+                // 保存按钮视图引用
+                plantButtonViews.put(type, imageView);
+            }
+        }
+        
+        // 不显示阳光成本数字
+        // 添加PlantCard到容器
+        plantBox.getChildren().add(plantCard);
         plantSelector.getChildren().add(plantBox);
 
         // 设置按钮点击事件
@@ -447,6 +506,91 @@ public class BattleScene extends Scene {
                 battleStatusText.setText("请先开始战斗！");
             }
         });
+
+        // 添加鼠标悬停效果到PlantCard
+        plantCard.setOnMouseEntered(e -> {
+            if (plantCard.isReady()) {
+                plantCard.setStyle("-fx-background-color: #dda15e; -fx-text-fill: white;");
+            }
+        });
+
+        plantCard.setOnMouseExited(e -> {
+            if (plantCard.isReady() && selectedPlantType != type) {
+                plantCard.setStyle("-fx-background-color: #bc6c25; -fx-text-fill: white;");
+            } else if (selectedPlantType == type) {
+                plantCard.setStyle("-fx-background-color: #fefae0; -fx-text-fill: #bc6c25;");
+            }
+        });
+    }
+    
+    /**
+     * 设置植物选择按钮大小
+     */
+    public void setPlantButtonSize(double width, double height) {
+        this.plantButtonWidth = width;
+        this.plantButtonHeight = height;
+        // 更新植物选择栏布局
+        updatePlantSelectorLayout();
+    }
+    
+    /**
+     * 设置植物选择按钮间距
+     */
+    public void setPlantButtonSpacing(double spacing) {
+        this.plantButtonSpacing = spacing;
+        plantSelector.setSpacing(spacing);
+    }
+    
+    /**
+     * 设置植物选择栏内边距
+     */
+    public void setPlantSelectorPadding(double padding) {
+        this.plantSelectorPadding = padding;
+        plantSelector.setPadding(new Insets(padding));
+    }
+    
+    /**
+     * 设置植物选择栏位置
+     */
+    public void setPlantSelectorPosition(double x, double y) {
+        this.plantSelectorX = x;
+        this.plantSelectorY = y;
+        plantSelector.setLayoutX(x);
+        plantSelector.setLayoutY(y);
+    }
+    
+    /**
+     * 更新植物选择栏布局
+     */
+    private void updatePlantSelectorLayout() {
+        // 更新位置
+        plantSelector.setLayoutX(plantSelectorX);
+        plantSelector.setLayoutY(plantSelectorY);
+        
+        // 更新按钮大小和样式
+        for (javafx.scene.Node node : plantSelector.getChildren()) {
+            if (node instanceof VBox) {
+                VBox box = (VBox) node;
+                if (box.getChildren().size() > 0 && box.getChildren().get(0) instanceof Button) {
+                    Button btn = (Button) box.getChildren().get(0);
+                    
+                    // 跳过铲子按钮，保持我们设置的70*70大小
+                    if (!btn.getText().equals("铲子")) {
+                        btn.setPrefSize(plantButtonWidth, plantButtonHeight);
+                        
+                        // 更新按钮图片大小（与按钮大小成比例）
+                        if (btn.getGraphic() instanceof ImageView) {
+                            ImageView imageView = (ImageView) btn.getGraphic();
+                            imageView.setFitWidth(plantButtonWidth); // 图片宽度与按钮宽度一致
+                            imageView.setFitHeight(plantButtonHeight - 20); // 图片高度比按钮高度小20px，保持适当边距
+                        }
+                        
+                        // 确保按钮样式完全透明
+                        btn.setStyle("-fx-background-color: transparent; -fx-border-color: transparent; -fx-background-radius: 0; -fx-background-insets: 0; -fx-border-width: 0;");
+                    }
+                }
+            }
+        }
     }
     
     public int getLevel() {
@@ -465,7 +609,6 @@ public class BattleScene extends Scene {
             battleStartTime = System.currentTimeMillis();
             battleProgress = 0;
             stopSpawningZombies = false;
-            // 启动游戏循环，但不使用它的僵尸生成功能
             ((GameLoopServiceImpl) gameLoopService).setSpawnService(spawnService);
             gameLoopService.start();
 
@@ -475,6 +618,7 @@ public class BattleScene extends Scene {
             sunGenerationThread.start();
             // 使用我们的新方法启动僵尸生成任务
             startZombieSpawnTask();
+
 
 
             System.out.println("开始关卡 " + level + " 的战斗！");
@@ -497,11 +641,12 @@ public class BattleScene extends Scene {
         if (sunBankService.getSunAmount() >= type.getCost()) {
             // 扣除阳光
             sunBankService.removeSun(type.getCost());
-            sunAmountText.setText("阳光: " + sunBankService.getSunAmount());
+            sunAmountText.setText("       " + sunBankService.getSunAmount());
             
             // 创建植物实体
             double x = col * (80 + 2);
             double y = row *82+5;
+
             Position position = new Position(x, y);
             Plant plant = PlantFactory.getInstance().createPlant(type, position);
             plants.add(plant);
@@ -531,15 +676,13 @@ public class BattleScene extends Scene {
 
             // 取消选中状态
             selectedPlantType = null;
-            // 恢复按钮样式
+            // 恢复按钮样式，保持透明背景
             for (javafx.scene.Node node : plantSelector.getChildren()) {
                 if (node instanceof VBox) {
                     VBox box = (VBox) node;
-                    if (box.getChildren().size() > 0 && box.getChildren().get(0) instanceof PlantCard) {
-                        PlantCard card = (PlantCard) box.getChildren().get(0);
-                        if (card.isReady()) {
-                            card.setStyle("-fx-background-color: #bc6c25; -fx-text-fill: white;");
-                        }
+                    if (box.getChildren().size() > 0 && box.getChildren().get(0) instanceof Button) {
+                        Button btn = (Button) box.getChildren().get(0);
+                        btn.setStyle("-fx-background-color: transparent; -fx-border-color: transparent; -fx-background-radius: 0; -fx-background-insets: 0; -fx-border-width: 0;");
                     }
                 }
             }
@@ -588,6 +731,13 @@ public class BattleScene extends Scene {
     public void stopBattle() {
         if (battleStarted) {
             battleStarted = false;
+            isPaused = false; // 重置暂停标志
+            gameOver = false; // 重置游戏结束状态
+            battleStatusText.setText("战斗已停止");
+            startButton.setDisable(false);
+            startButton.setText("开始战斗");
+            pauseButton.setDisable(true); // 禁用暂停按钮
+            gameLoopService.stop();
             stopSpawningZombies = true;
 
             // 中断僵尸生成线程
@@ -601,9 +751,11 @@ public class BattleScene extends Scene {
                 sunGenerationThread.interrupt();
                 sunGenerationThread = null;
             }
-
-            // 停止游戏循环
-            gameLoopService.stop();
+            // 清空所有阳光
+            javafx.application.Platform.runLater(() -> {
+                sunLayer.getChildren().clear();
+                activeSuns.clear();
+            });
 
             // 清空游戏中的所有实体
             plants.clear();
@@ -861,7 +1013,7 @@ public class BattleScene extends Scene {
     private void collectSun(Sun sun, Circle sunVisual, Map<Sun, Double> sunTargetPositions) {
         sun.collect();
         sunBankService.addSun(sun.getValue());
-        sunAmountText.setText("阳光: " + sunBankService.getSunAmount());
+        sunAmountText.setText("       " + sunBankService.getSunAmount());
         battleStatusText.setText("获得阳光 +" + sun.getValue());
         System.out.println("阳光被收集，当前阳光数量: " + sunBankService.getSunAmount());
 
@@ -1555,10 +1707,11 @@ public class BattleScene extends Scene {
                 // 返回部分阳光（例如返还一半的阳光成本）
                 int refund = plantToRemove.getType().getCost() / 2;
                 sunBankService.addSun(refund);
-                sunAmountText.setText("阳光: " + sunBankService.getSunAmount());
+                sunAmountText.setText("       " + sunBankService.getSunAmount());
                 // 铲除成功后自动退出铲子模式
                 isShovelMode = false;
-                shovelButton.setStyle("-fx-background-color: #6c757d; -fx-text-fill: white;");
+                shovelButton.setStyle("-fx-background-color: transparent; -fx-text-fill: white;");
+
             }
         } else {
             battleStatusText.setText("该位置没有植物！");
@@ -1634,8 +1787,10 @@ public class BattleScene extends Scene {
         zombies.clear();
         projectiles.clear();
         activeSuns.clear();
+
         isFirstZombieSpawn = true; // 重置首次启动标志
         flagZombieSpawned = false; // 重置旗帜僵尸标志
+
         // 重置游戏状态
         battleStarted = false;
         isPaused = false; // 重置暂停标志
@@ -1643,9 +1798,11 @@ public class BattleScene extends Scene {
         selectedPlantType = null;
         isShovelMode = false;
         stopSpawningZombies = false;
+
         halfwayZombieWaveTriggered = false; // 重置50%进度僵尸潮标志
         finalZombieWaveTriggered = false; // 重置100%进度僵尸潮标志
         isHalfwayProgressReached = false; // 重置50%进度标志位
+
         // 确保GameLoopService也重置停止生成僵尸的状态
         if (gameLoopService instanceof GameLoopServiceImpl) {
             ((GameLoopServiceImpl) gameLoopService).setStopSpawningZombies(false);
@@ -1674,7 +1831,9 @@ public class BattleScene extends Scene {
 
         // 重置阳光数量
         sunBankService.setSunAmount(50); // 设置初始阳光数量
-        sunAmountText.setText("阳光: " + sunBankService.getSunAmount());
+
+        sunAmountText.setText("       " + sunBankService.getSunAmount());
+
 
         // 重新创建小推车
         carts.clear();
@@ -1701,6 +1860,7 @@ public class BattleScene extends Scene {
         // 计算进度（0-1）
         battleProgress = Math.min((double) elapsedTime / battleDuration, 1.0);
         progressBar.setProgress(battleProgress);
+
 
         // 设置进度50%标志位
         if (battleProgress >= 0.5 && !isHalfwayProgressReached) {
@@ -1777,6 +1937,7 @@ public class BattleScene extends Scene {
             // 跳转到选关界面
             Router.getInstance().showLevelSelectScene();
         });
+
         buttonBox.getChildren().add(backToLevelSelectButton);
         // 开始下一关按钮 - 修改自"重新游戏"按钮
         if (level < 3) {
@@ -1809,11 +1970,13 @@ public class BattleScene extends Scene {
                 sunGenerationThread.interrupt();
                 sunGenerationThread = null;
             }
+
             // 中断僵尸生成线程（新增）
             if (zombieSpawnThread != null && zombieSpawnThread.isAlive()) {
                 zombieSpawnThread.interrupt();
                 zombieSpawnThread = null;
             }
+
             // 暂停游戏循环
             gameLoopService.stop();
             // 显示暂停对话框
@@ -1834,8 +1997,10 @@ public class BattleScene extends Scene {
             sunGenerationThread = new Thread(this::sunGenerationTask);
             sunGenerationThread.setDaemon(true);
             sunGenerationThread.start();
+
             // 重新启动僵尸生成线程（新增）
             startZombieSpawnTask();
+
             // 隐藏暂停对话框
             Pane root = (Pane) getRoot();
             for (javafx.scene.Node node : root.getChildren()) {
@@ -1916,6 +2081,7 @@ public class BattleScene extends Scene {
         // 将遮罩层添加到场景根节点
         ((Pane) getRoot()).getChildren().add(overlay);
     }
+
     /**
      * 触发僵尸潮
      * @param message 显示给玩家的消息

@@ -178,6 +178,7 @@ public class Plant implements GameObject {
      */
     private Projectile createProjectile(boolean isSecond) {
         // 子弹从植物前方发射
+
         double xOffset = isSecond ? 20 : 0; // 第二颗子弹略微向上偏移
         Position projectilePos = new Position(position.x() + 105 + xOffset, position.y());
 
