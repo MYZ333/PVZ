@@ -82,7 +82,7 @@ public class BattleScene extends Scene {
     private Map<Projectile, Pane> projectileViews = new HashMap<>(); // 子弹视图映射，直接使用Projectile对象作为键
 
     private Map<PlantType, String> plantImagePaths = new HashMap<>();
-    
+
     // 植物按钮大小控制参数
     private double plantButtonWidth; // 植物按钮宽度
     private double plantButtonHeight; // 植物按钮高度
@@ -90,7 +90,7 @@ public class BattleScene extends Scene {
     private double plantSelectorPadding; // 植物选择栏内边距
     private double plantSelectorX; // 植物选择栏X坐标
     private double plantSelectorY; // 植物选择栏Y坐标
-    
+
     private Map<PlantType, ImageView> plantButtonViews = new HashMap<>(); // 植物按钮视图映射，用于控制选中状态
     private final Map<Sun, Double> sunTargetPositions = new HashMap<>(); // 阳光目标位置映射
     private SpawnService spawnService; // 僵尸生成服务
@@ -168,7 +168,7 @@ public class BattleScene extends Scene {
         plantImagePaths.put(PlantType.WALLNUT, "/pic/jianguo.png"); // 坚果墙图片路径
         plantImagePaths.put(PlantType.CHERRY_BOMB, "/pic/boom.png"); // 樱桃炸弹图片路径
         plantImagePaths.put(PlantType.REPEATER, "/pic/double.png"); // 双发射手图片路径
-        
+
         // 植物按钮大小和间距设置
         this.plantButtonWidth = 93; // 植物按钮宽度（缩小按钮本体）
         this.plantButtonHeight = 105; // 植物按钮高度（缩小按钮本体）
@@ -216,7 +216,7 @@ public class BattleScene extends Scene {
         progressBar.setStyle("-fx-accent: #2a9d8f;"); // 设置进度条颜色
 
         topBar.getChildren().addAll(levelText, battleStatusText, progressBar);
-     
+
         // 游戏棋盘
         gameGrid = new GridPane();
         gameGrid.setHgap(2);
@@ -404,9 +404,9 @@ public class BattleScene extends Scene {
             pauseBattle();
         });
         plantSelector.getChildren().add(pauseButton); // 直接添加到植物选择栏中
-        
+
         buttonBar.getChildren().addAll(startButton, backButton); // 不再包含暂停按钮
-        
+
         // 直接设置按钮栏的垂直位置，使其向下移动更多距离
         buttonBar.setLayoutY(80); // 向下移动80px
 
@@ -417,21 +417,21 @@ public class BattleScene extends Scene {
         sunDisplayContainer.setLayoutY(595); // 向下移动600px
         sunDisplayContainer.getChildren().add(sunAmountText);
         sunDisplayContainer.setMouseTransparent(true); // 避免遮挡其他UI元素
-        
+
         // 添加一个空白占位元素，使按钮栏向下移动100px
         Region spacer = new Region();
         spacer.setPrefHeight(100);
-        
+
         // 将除了plantSelector之外的元素添加到主布局
         mainLayout.getChildren().addAll(topBar, gameContainer, spacer, buttonBar);
-      
+
         // 添加这一行代码，确保gameContainer在水平方向上居中
         mainLayout.setAlignment(Pos.TOP_CENTER);
-        
+
         // 设置植物选择栏的绝对位置
         plantSelector.setLayoutX(plantSelectorX);
         plantSelector.setLayoutY(plantSelectorY);
-        
+
         // 将所有元素添加到根容器
         root.getChildren().add(mainLayout);
         root.getChildren().add(sunDisplayContainer);
@@ -465,7 +465,7 @@ public class BattleScene extends Scene {
                 plantButtonViews.put(type, imageView);
             }
         }
-        
+
         // 不显示阳光成本数字
         // 添加PlantCard到容器
         plantBox.getChildren().add(plantCard);
@@ -522,7 +522,7 @@ public class BattleScene extends Scene {
             }
         });
     }
-    
+
     /**
      * 设置植物选择按钮大小
      */
@@ -532,7 +532,7 @@ public class BattleScene extends Scene {
         // 更新植物选择栏布局
         updatePlantSelectorLayout();
     }
-    
+
     /**
      * 设置植物选择按钮间距
      */
@@ -540,7 +540,7 @@ public class BattleScene extends Scene {
         this.plantButtonSpacing = spacing;
         plantSelector.setSpacing(spacing);
     }
-    
+
     /**
      * 设置植物选择栏内边距
      */
@@ -548,7 +548,7 @@ public class BattleScene extends Scene {
         this.plantSelectorPadding = padding;
         plantSelector.setPadding(new Insets(padding));
     }
-    
+
     /**
      * 设置植物选择栏位置
      */
@@ -558,7 +558,7 @@ public class BattleScene extends Scene {
         plantSelector.setLayoutX(x);
         plantSelector.setLayoutY(y);
     }
-    
+
     /**
      * 更新植物选择栏布局
      */
@@ -566,25 +566,25 @@ public class BattleScene extends Scene {
         // 更新位置
         plantSelector.setLayoutX(plantSelectorX);
         plantSelector.setLayoutY(plantSelectorY);
-        
+
         // 更新按钮大小和样式
         for (javafx.scene.Node node : plantSelector.getChildren()) {
             if (node instanceof VBox) {
                 VBox box = (VBox) node;
                 if (box.getChildren().size() > 0 && box.getChildren().get(0) instanceof Button) {
                     Button btn = (Button) box.getChildren().get(0);
-                    
+
                     // 跳过铲子按钮，保持我们设置的70*70大小
                     if (!btn.getText().equals("铲子")) {
                         btn.setPrefSize(plantButtonWidth, plantButtonHeight);
-                        
+
                         // 更新按钮图片大小（与按钮大小成比例）
                         if (btn.getGraphic() instanceof ImageView) {
                             ImageView imageView = (ImageView) btn.getGraphic();
                             imageView.setFitWidth(plantButtonWidth); // 图片宽度与按钮宽度一致
                             imageView.setFitHeight(plantButtonHeight - 20); // 图片高度比按钮高度小20px，保持适当边距
                         }
-                        
+
                         // 确保按钮样式完全透明
                         btn.setStyle("-fx-background-color: transparent; -fx-border-color: transparent; -fx-background-radius: 0; -fx-background-insets: 0; -fx-border-width: 0;");
                     }
@@ -1798,11 +1798,9 @@ public class BattleScene extends Scene {
         selectedPlantType = null;
         isShovelMode = false;
         stopSpawningZombies = false;
-
         halfwayZombieWaveTriggered = false; // 重置50%进度僵尸潮标志
         finalZombieWaveTriggered = false; // 重置100%进度僵尸潮标志
         isHalfwayProgressReached = false; // 重置50%进度标志位
-
         // 确保GameLoopService也重置停止生成僵尸的状态
         if (gameLoopService instanceof GameLoopServiceImpl) {
             ((GameLoopServiceImpl) gameLoopService).setStopSpawningZombies(false);
@@ -1860,7 +1858,6 @@ public class BattleScene extends Scene {
         // 计算进度（0-1）
         battleProgress = Math.min((double) elapsedTime / battleDuration, 1.0);
         progressBar.setProgress(battleProgress);
-
 
         // 设置进度50%标志位
         if (battleProgress >= 0.5 && !isHalfwayProgressReached) {
@@ -1937,7 +1934,6 @@ public class BattleScene extends Scene {
             // 跳转到选关界面
             Router.getInstance().showLevelSelectScene();
         });
-
         buttonBox.getChildren().add(backToLevelSelectButton);
         // 开始下一关按钮 - 修改自"重新游戏"按钮
         if (level < 3) {
@@ -1970,13 +1966,11 @@ public class BattleScene extends Scene {
                 sunGenerationThread.interrupt();
                 sunGenerationThread = null;
             }
-
             // 中断僵尸生成线程（新增）
             if (zombieSpawnThread != null && zombieSpawnThread.isAlive()) {
                 zombieSpawnThread.interrupt();
                 zombieSpawnThread = null;
             }
-
             // 暂停游戏循环
             gameLoopService.stop();
             // 显示暂停对话框
@@ -1997,10 +1991,8 @@ public class BattleScene extends Scene {
             sunGenerationThread = new Thread(this::sunGenerationTask);
             sunGenerationThread.setDaemon(true);
             sunGenerationThread.start();
-
             // 重新启动僵尸生成线程（新增）
             startZombieSpawnTask();
-
             // 隐藏暂停对话框
             Pane root = (Pane) getRoot();
             for (javafx.scene.Node node : root.getChildren()) {
@@ -2081,7 +2073,6 @@ public class BattleScene extends Scene {
         // 将遮罩层添加到场景根节点
         ((Pane) getRoot()).getChildren().add(overlay);
     }
-
     /**
      * 触发僵尸潮
      * @param message 显示给玩家的消息
