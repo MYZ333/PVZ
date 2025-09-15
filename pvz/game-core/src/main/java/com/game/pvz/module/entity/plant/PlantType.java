@@ -4,10 +4,7 @@ package com.game.pvz.module.entity.plant;
  * 植物类型枚举
  */
 public enum PlantType {
-<<<<<<< HEAD
 
-=======
->>>>>>> f301b6087c14b4819f630b2622fbff8764c4f319
     PEASHOOTER(10, 20, 1, 5000),       // 豌豆射手，5秒冷却
     SUNFLOWER(5, 50, 1, 7000),         // 向日葵，7秒冷却
     WALLNUT(5, 300, 1, 10000),         // 坚果墙，10秒冷却
@@ -37,15 +34,9 @@ public enum PlantType {
     public int getRange() {
         return range;
     }
-<<<<<<< HEAD
 
     public int getCooldown() {
         return cooldown;
     }
 
-=======
-    public int getCooldown() {
-        return cooldown;
-    }
->>>>>>> f301b6087c14b4819f630b2622fbff8764c4f319
 }

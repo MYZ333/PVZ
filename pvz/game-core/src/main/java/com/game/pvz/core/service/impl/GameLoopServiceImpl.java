@@ -115,9 +115,6 @@ public class GameLoopServiceImpl implements GameLoopService {
             System.out.println("游戏帧: " + frameCount + ", 运行时间: " + elapsedTime.toSeconds() + "秒");
         }
         
-<<<<<<< HEAD
 
-=======
->>>>>>> f301b6087c14b4819f630b2622fbff8764c4f319
     }
 }
