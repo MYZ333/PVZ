@@ -55,6 +55,8 @@ import javafx.util.Duration;
 import java.util.ArrayList;
 import java.util.List;
 import javafx.scene.layout.Pane;
+import javafx.animation.PauseTransition;
+import javafx.util.Duration;
 /**
  * 战场场景（类）
  */
@@ -182,11 +184,11 @@ public class BattleScene extends Scene {
         plantImagePaths.put(PlantType.REPEATER, "/pic/double.png"); // 双发射手图片路径
 
         // 植物按钮大小和间距设置
-        this.plantButtonWidth = 93; // 植物按钮宽度（缩小按钮本体）
-        this.plantButtonHeight = 105; // 植物按钮高度（缩小按钮本体）
-        this.plantButtonSpacing = -15; // 植物按钮间距（已减小）
+        this.plantButtonWidth = 73; // 植物按钮宽度（缩小按钮本体）
+        this.plantButtonHeight = 78; // 植物按钮高度（缩小按钮本体）
+        this.plantButtonSpacing = 4; // 植物按钮间距（已减小）
         this.plantSelectorPadding = 10; // 植物选择栏内边距
-        this.plantSelectorX = 100; // 植物选择栏X坐标
+        this.plantSelectorX = 118; // 植物选择栏X坐标
         this.plantSelectorY = 490; // 植物选择栏Y坐标
         
         // 注册僵尸生成事件监听器
@@ -393,7 +395,7 @@ public class BattleScene extends Scene {
         startButton.setPrefSize(120, 40);
         startButton.setFont(Font.font("Arial", FontWeight.NORMAL, 16));
         startButton.setOnAction(e -> {
-            startBattle();
+           startBattle();
         });
         
         // 返回选关按钮
@@ -480,7 +482,7 @@ private void initZombieImageConfig(){
         PlantCard plantCard = new PlantCard(type.name(), type.getCost());
         plantCard.setPrefSize(plantButtonWidth, plantButtonHeight);
         plantCard.setStyle("-fx-background-color: #bc6c25; -fx-text-fill: white;");
-
+        plantCard.setPadding(new Insets(0));
         // 加载植物图片
         String imagePath = plantImagePaths.get(type);
         if (imagePath != null && !imagePath.isEmpty()) {
@@ -488,11 +490,14 @@ private void initZombieImageConfig(){
             if (plantImage != null) {
                 ImageView imageView = new ImageView(plantImage);
                 imageView.setFitWidth(plantButtonWidth); // 图片宽度与按钮宽度一致
-                imageView.setFitHeight(plantButtonHeight - 20); // 图片高度比按钮高度小20px，保持适当边距
-                imageView.setPreserveRatio(true);
-                plantCard.setGraphic(imageView); // 设置PlantCard的图标为植物图片
-
+                imageView.setFitHeight(plantButtonHeight); // 图片高度也与按钮高度一致
+                imageView.setPreserveRatio(false);
+                plantCard.setGraphic(imageView);
+                imageView.setSmooth(true);// 设置PlantCard的图标为植物图片
+                imageView.setViewport(null);
+                imageView.setStyle("-fx-padding: 0;");
                 // 保存按钮视图引用
+                plantCard.setGraphic(imageView);
                 plantButtonViews.put(type, imageView);
             }
         }

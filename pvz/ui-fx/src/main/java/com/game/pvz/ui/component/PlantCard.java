@@ -25,10 +25,10 @@ public class PlantCard extends Button {
     
     private void initialize() {
 
-        setText(plantType); // 设置按钮文本为植物类型名称
-        setFont(Font.font("Arial", FontWeight.BOLD, 12)); // 设置字体样式
-        setPrefSize(80, 150);
-        setStyle("-fx-background-color: #bc6c25; -fx-text-fill: white;");// 实现植物卡片的初始化逻辑
+       // setText(plantType); // 设置按钮文本为植物类型名称
+        //setFont(Font.font("Arial", FontWeight.BOLD, 12)); // 设置字体样式
+        //setPrefSize(80, 150);
+        //setStyle("-fx-background-color: #bc6c25; -fx-text-fill: white;");// 实现植物卡片的初始化逻辑
     }
     
     public String getPlantType() {

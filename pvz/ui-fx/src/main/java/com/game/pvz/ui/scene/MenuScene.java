@@ -27,6 +27,14 @@ import java.util.ArrayList;
 import java.util.List;
 import javafx.stage.WindowEvent;
 
+import javafx.animation.KeyFrame;
+import javafx.animation.KeyValue;
+import javafx.animation.SequentialTransition;
+import javafx.animation.Timeline;
+import javafx.animation.PauseTransition;
+import javafx.animation.Interpolator;
+import javafx.util.Duration;
+
 /**
  * 主菜单场景（类）
  */
@@ -175,6 +183,10 @@ public class MenuScene extends Scene {
         startButton.setBackground(Background.EMPTY);
         startButton.setBorder(Border.EMPTY);
         
+        // 修复：添加下面两行代码
+        root.getChildren().add(startButton); // 将按钮添加到根节点使其可见
+        allButtons.add(startButton); // 将按钮添加到按钮列表便于统一管理
+        
         // 鼠标停放时显示图片
         startButton.setOnMouseEntered(e -> {
             if (this.startButtonView != null) {
@@ -207,9 +219,60 @@ public class MenuScene extends Scene {
         });
         
         startButton.setOnAction(e -> {
-            Router.getInstance().showLevelSelectScene();
+            // 创建shishishi.png图片视图
+            Image shishishiImage = ResourcePool.getInstance().getImage("/pic/shishishi.png");
+            if (shishishiImage != null) {
+                ImageView shishishiView = new ImageView(shishishiImage);
+                
+                // 将图片放大一倍
+                shishishiView.setScaleX(2.0);
+                shishishiView.setScaleY(2.0);
+                
+                // 设置图片初始位置在屏幕底部之外
+                double screenWidth = 1200;  // 屏幕宽度
+                double screenHeight = 900;  // 屏幕高度
+                double imageWidth = shishishiImage.getWidth();
+                double imageHeight = shishishiImage.getHeight();
+                
+                // 计算放大后的图片尺寸
+                double scaledWidth = imageWidth * 2.0;
+                double scaledHeight = imageHeight * 2.0;
+                
+                // 设置图片初始位置（考虑放大后的尺寸）
+                shishishiView.setLayoutX((screenWidth - scaledWidth) / 2);  // X坐标居中
+                shishishiView.setLayoutY(screenHeight + scaledHeight);  // Y坐标在屏幕底部之外
+                
+                // 添加到根节点
+                root.getChildren().add(shishishiView);
+                
+                // 创建上升动画（1.5秒）
+                double targetY = 400;  // 目标Y坐标（屏幕中间，考虑放大后的尺寸）
+                Timeline moveUpTimeline = new Timeline();
+                KeyValue moveUpKeyValue = new KeyValue(shishishiView.layoutYProperty(), targetY); // 使用默认线性插值
+                KeyFrame moveUpKeyFrame = new KeyFrame(Duration.seconds(1.5), moveUpKeyValue);  // 上升时间1.5秒
+                moveUpTimeline.getKeyFrames().add(moveUpKeyFrame);
+                
+                // 创建停留动画（1.5秒）
+                PauseTransition pause = new PauseTransition(Duration.seconds(1.5));  // 停留时间1.5秒
+                
+                // 创建跳转动画序列
+                SequentialTransition sequence = new SequentialTransition(moveUpTimeline, pause);
+                
+                // 设置动画完成后跳转到选关界面
+                sequence.setOnFinished(event -> {
+                    // 可选：在跳转前移除图片
+                    root.getChildren().remove(shishishiView);
+                    // 跳转到选关界面
+                    Router.getInstance().showLevelSelectScene();
+                });
+                
+                // 启动动画序列
+                sequence.play();
+            } else {
+                // 如果图片加载失败，直接跳转
+                Router.getInstance().showLevelSelectScene();
+            }
         });
-        root.getChildren().add(startButton);
         // 添加到按钮列表
         allButtons.add(startButton);
 
