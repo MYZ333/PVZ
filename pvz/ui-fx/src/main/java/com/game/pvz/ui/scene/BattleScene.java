@@ -930,7 +930,6 @@ private void initZombieImageConfig(){
     public void stopBattle() {
         if (battleStarted) {
             battleStarted = false;
-            gameOver = false; // 重置游戏结束状态
             battleStatusText.setText("战斗已停止");
             startButton.setDisable(false);
             startButton.setText("开始战斗");
@@ -2197,7 +2196,6 @@ private void initZombieImageConfig(){
             cartView.setFitWidth(90);
             cartView.setFitHeight(60);
             cartView.setPreserveRatio(true); // 保持图片比例
-
             // 可选：图片加载前的占位样式（类似原矩形）
             cartView.setStyle("-fx-background-color: #8B4513;");
 
@@ -2454,7 +2452,7 @@ private void initZombieImageConfig(){
     private void checkGameVictory() {
         // 条件1：进度条已满（不再生成僵尸）
         // 条件2：所有僵尸已被消灭
-        if (stopSpawningZombies && zombies.isEmpty()) {
+        if (!gameOver&&stopSpawningZombies && zombies.isEmpty()) {
             gameOver = true;
             showGameVictoryDialog();
         }
