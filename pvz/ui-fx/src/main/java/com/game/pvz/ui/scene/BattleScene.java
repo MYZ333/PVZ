@@ -1,5 +1,7 @@
 package com.game.pvz.ui.scene;
 
+import java.util.*;
+import java.util.concurrent.atomic.AtomicBoolean;
 import com.game.pvz.core.event.EventBus;
 import com.game.pvz.core.event.GameEventListener;
 import com.game.pvz.core.event.ZombieSpawned;
@@ -19,12 +21,18 @@ import com.game.pvz.module.entity.zombie.ZombieFactory;
 import com.game.pvz.module.entity.zombie.ZombieType;
 import com.game.pvz.ui.app.Router;
 import com.game.pvz.ui.app.ResourcePool;
+import com.game.pvz.ui.component.PlantCard;
 import javafx.animation.AnimationTimer;
+import javafx.animation.KeyFrame;
+import javafx.animation.Timeline;
 import javafx.geometry.Bounds;
 import javafx.geometry.Insets;
 import javafx.geometry.Pos;
+import javafx.scene.Node;
 import javafx.scene.Scene;
 import javafx.scene.control.Button;
+import javafx.scene.control.ProgressBar;
+import javafx.scene.image.Image;
 import javafx.scene.image.ImageView;
 import javafx.scene.layout.*;
 import javafx.scene.paint.Color;
@@ -32,23 +40,30 @@ import javafx.scene.shape.Circle;
 import javafx.scene.text.Font;
 import javafx.scene.text.FontWeight;
 import javafx.scene.text.Text;
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Map;
-import java.util.HashMap;
-import java.util.UUID;
-import java.util.Random;
 import com.game.pvz.module.entity.projectile.Projectile;
 import com.game.pvz.module.entity.projectile.ProjectileType;
 import java.util.concurrent.CopyOnWriteArrayList;
 import com.game.pvz.module.entity.cart.Cart;
 import com.game.pvz.module.entity.cart.CartFactory;
 import com.game.pvz.module.entity.cart.CartType;
+import javafx.util.Duration;
+import javafx.animation.KeyFrame;
+import javafx.animation.Timeline;
+import javafx.scene.image.Image;
+import javafx.scene.image.ImageView;
+import javafx.util.Duration;
+import java.util.ArrayList;
+import java.util.List;
+import javafx.scene.layout.Pane;
 /**
  * 战场场景（类）
  */
 public class BattleScene extends Scene {
-
+    private enum ZombieState {
+        WALKING,  // 行走（移动+播放走路动画）
+        ATTACKING, // 攻击（停止移动+播放攻击动画）
+        DEAD      // 死亡（停止所有行为+播放死亡动画）
+    }
     private int level;
     private boolean battleStarted = false;
     private GameLoopService gameLoopService;
@@ -59,6 +74,8 @@ public class BattleScene extends Scene {
     private Text battleStatusText; // 战斗状态显示
     private Button startButton;
     private Pane sunLayer; // 用于显示阳光的层
+    // 1. 首先，我们需要一个集合来跟踪所有下落中的阳光
+    private List<Sun> fallingSuns = new ArrayList<>();
     private Pane zombieLayer; // 用于显示僵尸的层
     private Pane projectileLayer; // 用于显示子弹的层
     private List<Sun> activeSuns; // 活跃的阳光实体列表
@@ -70,14 +87,59 @@ public class BattleScene extends Scene {
     private Map<String, Pane> plantCells = new HashMap<>(); // 植物单元格映射
     private Map<UUID, ImageView> zombieViews = new HashMap<>(); // 僵尸视图映射
     private Map<UUID, Pane> zombieContainers = new HashMap<>(); // 僵尸容器映射
+    private Map<UUID, ZombieState> zombieStates = new HashMap<>();
+    private Map<UUID, Timeline> zombieAnimationTimelines = new HashMap<>();
+    private Map<ZombieType, String> zombieImageBasePaths = new HashMap<>();
+    private Map<ZombieType, Integer> zombieFrameCounts = new HashMap<>();
     private Map<Projectile, Pane> projectileViews = new HashMap<>(); // 子弹视图映射，直接使用Projectile对象作为键
-    private Map<PlantType, String> plantImagePaths = new HashMap<>(); // 植物图片路径映射
+    private Map<PlantType, String> plantImagePaths = new HashMap<>();
+    // 植物按钮大小控制参数
+    private double plantButtonWidth; // 植物按钮宽度
+    private double plantButtonHeight; // 植物按钮高度
+    private double plantButtonSpacing; // 植物按钮间距
+    private double plantSelectorPadding; // 植物选择栏内边距
+    private double plantSelectorX; // 植物选择栏X坐标
+    private double plantSelectorY; // 植物选择栏Y坐标
+    private Map<PlantType, ImageView> plantButtonViews = new HashMap<>(); // 植物按钮视图映射，用于控制选中状态
+    private final Map<Sun, Double> sunTargetPositions = new HashMap<>(); // 阳光目标位置映射
     private SpawnService spawnService; // 僵尸生成服务
     private StackPane gameContainer; // 添加gameContainer作为类成员变量
     private List<Cart> carts = new ArrayList<>(); // 所有小推车列表
-    private Map<Integer, Region> cartViews = new HashMap<>(); // 小推车视图映射（按车道索引）
+    private Map<Integer, Node> cartViews = new HashMap<>(); // 小推车视图映射（按车道索引）
     private boolean isShovelMode = false; // 铲子模式标志
     private Button shovelButton; // 铲子按钮
+    private boolean gameOver = false;
+    // 添加进度条相关成员变量
+    private ProgressBar progressBar; // 游戏进度条
+    private double battleProgress = 0; // 当前进度（0-1）
+    private long battleStartTime; // 战斗开始时间
+    private boolean stopSpawningZombies = false; // 是否停止生成僵尸
+    private Button pauseButton; // 新增：暂停按钮
+    private boolean isPaused = false; // 新增：暂停状态标志
+    private Thread sunGenerationThread; // 添加阳光生成线程引用
+    private Thread zombieSpawnThread;
+    private boolean isFirstZombieSpawn = true;
+    private boolean flagZombieSpawned = false; // 新增：旗帜僵尸是否已生成的标志
+    private boolean halfwayZombieWaveTriggered = false; // 新增：50%进度僵尸潮是否已触发
+    private boolean finalZombieWaveTriggered = false; // 新增：100%进度僵尸潮是否已触发
+    private boolean isHalfwayProgressReached = false; // 跟踪是否已达到50%进度
+    private Pane gamePanel;
+
+    // 根据关卡设置不同的战斗持续时间（毫秒）
+    private long getBattleDurationByLevel() {
+        // 根据关卡返回不同的战斗持续时间（毫秒）
+        switch (level) {
+            case 1:
+                return 60000; // 关卡1: 1分钟
+            case 2:
+                return 120000; // 关卡2: 2分钟
+            case 3:
+                return 180000; // 关卡3: 3分钟
+            default:
+                // 防止意外情况
+                return 60000;
+        }
+    }
 
     public BattleScene(int level) {
         super(new Pane());
@@ -96,14 +158,36 @@ public class BattleScene extends Scene {
     private void initialize() {
         System.out.println("BattleScene.initialize() 方法开始执行");
         Pane root = (Pane) getRoot();
-        root.setStyle("-fx-background-color: #606c38;"); // 绿色背景
 
-        // 初始化植物图片路径映射（先空着，后续可以填充实际路径）
-        plantImagePaths.put(PlantType.SUNFLOWER, ""); // 向日葵图片路径
-        plantImagePaths.put(PlantType.PEASHOOTER, ""); // 豌豆射手图片路径
-        plantImagePaths.put(PlantType.WALLNUT, ""); // 坚果墙图片路径
-        plantImagePaths.put(PlantType.CHERRY_BOMB, ""); // 樱桃炸弹图片路径
-        plantImagePaths.put(PlantType.REPEATER, ""); // 双发射手图片路径
+        // 添加背景图片
+        Image backgroundImage = ResourcePool.getInstance().getImage("/pic/111.png");
+        if (backgroundImage != null) {
+            ImageView backgroundView = new ImageView(backgroundImage);
+            backgroundView.setFitWidth(1200);
+            backgroundView.setFitHeight(700);
+            backgroundView.setPreserveRatio(false);
+            root.getChildren().add(0, backgroundView);
+        } else {
+            // 如果图片加载失败，使用备用背景色
+            root.setStyle("-fx-background-color: #606c38;");
+        }
+        // 初始化僵尸图像配置（新增这一行）
+        initZombieImageConfig();
+
+        // 初始化植物图片路径映射
+        plantImagePaths.put(PlantType.SUNFLOWER, "/pic/xiang.png"); // 向日葵图片路径
+        plantImagePaths.put(PlantType.PEASHOOTER, "/pic/shouter.png"); // 豌豆射手图片路径
+        plantImagePaths.put(PlantType.WALLNUT, "/pic/jianguo.png"); // 坚果墙图片路径
+        plantImagePaths.put(PlantType.CHERRY_BOMB, "/pic/boom.png"); // 樱桃炸弹图片路径
+        plantImagePaths.put(PlantType.REPEATER, "/pic/double.png"); // 双发射手图片路径
+
+        // 植物按钮大小和间距设置
+        this.plantButtonWidth = 93; // 植物按钮宽度（缩小按钮本体）
+        this.plantButtonHeight = 105; // 植物按钮高度（缩小按钮本体）
+        this.plantButtonSpacing = -15; // 植物按钮间距（已减小）
+        this.plantSelectorPadding = 10; // 植物选择栏内边距
+        this.plantSelectorX = 100; // 植物选择栏X坐标
+        this.plantSelectorY = 490; // 植物选择栏Y坐标
         
         // 注册僵尸生成事件监听器
         registerZombieSpawnListener();
@@ -122,7 +206,6 @@ public class BattleScene extends Scene {
         HBox topBar = new HBox(20);
         topBar.setAlignment(Pos.CENTER_LEFT);
         topBar.setPadding(new Insets(5));
-        topBar.setStyle("-fx-background-color: #283618;");
         
         // 关卡信息
         Text levelText = new Text("关卡 " + level);
@@ -130,23 +213,28 @@ public class BattleScene extends Scene {
         levelText.setFill(Color.WHITE);
         
         // 阳光数量显示
-        sunAmountText = new Text("阳光: " + sunBankService.getSunAmount());
-        sunAmountText.setFont(Font.font("Arial", FontWeight.NORMAL, 16));
-        sunAmountText.setFill(Color.YELLOW);
+        sunAmountText = new Text("       " + sunBankService.getSunAmount());
+        sunAmountText.setFont(Font.font("Arial", FontWeight.BOLD, 20));
+        sunAmountText.setFill(Color.BLACK);
         
         // 战斗状态显示
         battleStatusText = new Text("战斗准备中...");
         battleStatusText.setFont(Font.font("Arial", FontWeight.NORMAL, 16));
         battleStatusText.setFill(Color.WHITE);
-        
-        topBar.getChildren().addAll(levelText, sunAmountText, battleStatusText);
-        
+
+        // 添加游戏进度条到顶部信息栏
+        progressBar = new ProgressBar(0);
+        progressBar.setPrefWidth(300);
+        progressBar.setStyle("-fx-accent: #2a9d8f;"); // 设置进度条颜色
+
+        topBar.getChildren().addAll(levelText, battleStatusText, progressBar);
+
         // 游戏棋盘
         gameGrid = new GridPane();
         gameGrid.setHgap(2);
         gameGrid.setVgap(2);
         gameGrid.setAlignment(Pos.TOP_LEFT);
-        gameGrid.setStyle("-fx-background-color: #283618;");
+
         
         // 创建5x12的游戏网格（5行12列）
         for (int row = 0; row < 5; row++) {
@@ -155,8 +243,11 @@ public class BattleScene extends Scene {
                 cell.setPrefSize(80, 80);
 
 
-                cell.setStyle("-fx-background-color: #3d5a14; -fx-border-color: #606c38; -fx-border-width: 1;");
-                
+
+                // 设置网格为完全透明，无边框
+                cell.setStyle("-fx-background-color: transparent; -fx-border-color: transparent; -fx-border-width: 0;");
+
+
                 // 保存行列信息到单元格
                 final int finalRow = row;
                 final int finalCol = col;
@@ -165,7 +256,7 @@ public class BattleScene extends Scene {
                 
                 gameGrid.add(cell, col, row);
             }
-          }
+        }
         // 创建阳光层，用于显示阳光
         sunLayer = new Pane();
 
@@ -181,7 +272,6 @@ public class BattleScene extends Scene {
         zombieLayer.setPrefSize(984, 500);
 
         zombieLayer.setMouseTransparent(false);
-
         // 创建子弹层，用于显示子弹
         projectileLayer = new Pane();
         projectileLayer.setPrefSize(984, 500);
@@ -194,7 +284,8 @@ public class BattleScene extends Scene {
 
             // 从代码中可以看出，每个车道的Y坐标计算方式为：laneIndex * 82 + 5
             // 最左侧的X坐标为10
-            Position cartPosition = new Position(10, laneIndex * 82 + 5);
+            Position cartPosition = new Position(10, laneIndex * 82 + 5+40);
+
 
 
             // 创建小推车实体
@@ -248,10 +339,10 @@ public class BattleScene extends Scene {
         });
 
         // 植物选择栏
-        plantSelector = new HBox(10);
+
+        plantSelector = new HBox(plantButtonSpacing);
         plantSelector.setAlignment(Pos.CENTER);
-        plantSelector.setPadding(new Insets(10));
-        plantSelector.setStyle("-fx-background-color: #283618;");
+        plantSelector.setPadding(new Insets(plantSelectorPadding));
         
         // 添加可选植物按钮
         addPlantButton(PlantType.SUNFLOWER);
@@ -260,36 +351,33 @@ public class BattleScene extends Scene {
         addPlantButton(PlantType.CHERRY_BOMB);
         addPlantButton(PlantType.REPEATER);
         // 添加铲子按钮
-        shovelButton = new Button("铲子");
-        shovelButton.setPrefSize(80, 150);
+        shovelButton = new Button("");
+        shovelButton.setPrefSize(100, 100); // 改为80*80大小
         shovelButton.setFont(Font.font("Arial", FontWeight.BOLD, 12));
-        shovelButton.setStyle("-fx-background-color: #6c757d; -fx-text-fill: white;");
+        shovelButton.setStyle("-fx-background-color: transparent; -fx-text-fill: white;");
+        // 设置铲子按钮向右移动150px（比原来多移100px），再额外右移20px，然后左移15px，再左移5px
+        HBox.setMargin(shovelButton, new Insets(0, 0, 0, 110));
+        plantSelector.getChildren().add(shovelButton);
 
-        VBox shovelBox = new VBox(5);
-        shovelBox.setAlignment(Pos.CENTER);
-        shovelBox.getChildren().add(shovelButton);
-        plantSelector.getChildren().add(shovelBox);
         // 设置铲子按钮点击事件
         shovelButton.setOnAction(e -> {
             if (battleStarted) {
                 isShovelMode = !isShovelMode;
                 if (isShovelMode) {
-                    shovelButton.setStyle("-fx-background-color: #fefae0; -fx-text-fill: #6c757d;");
-                    battleStatusText.setText("已选择铲子，请点击植物铲除");
+                        shovelButton.setStyle("-fx-background-color: transparent;");
+                        battleStatusText.setText("已选择铲子，请点击植物铲除");
                     selectedPlantType = null; // 取消植物选择
                     // 恢复植物按钮样式
+                    // 恢复植物按钮样式
                     for (javafx.scene.Node node : plantSelector.getChildren()) {
-                        if (node instanceof VBox) {
-                            VBox box = (VBox) node;
-                            if (box.getChildren().size() > 0 && box.getChildren().get(0) instanceof Button && box != shovelBox) {
-                                Button btn = (Button) box.getChildren().get(0);
-                                btn.setStyle("-fx-background-color: #bc6c25; -fx-text-fill: white;");
-                            }
+                        if (node instanceof Button && node != shovelButton && node != pauseButton) {
+                            Button btn = (Button) node;
+                            btn.setStyle("-fx-background-color: #bc6c25; -fx-text-fill: white;");
                         }
                     }
                 } else {
-                    shovelButton.setStyle("-fx-background-color: #6c757d; -fx-text-fill: white;");
-                    battleStatusText.setText("已取消铲子模式");
+                        shovelButton.setStyle("-fx-background-color: transparent; -fx-text-fill: white;");
+                        battleStatusText.setText("已取消铲子模式");
                 }
             } else {
                 battleStatusText.setText("请先开始战斗！");
@@ -316,76 +404,223 @@ public class BattleScene extends Scene {
             stopBattle();
             Router.getInstance().showLevelSelectScene();
         });
-        
-        buttonBar.getChildren().addAll(startButton, backButton);
+        // 暂停按钮 - 移到铲子按钮右侧
+        pauseButton = new Button("");
+        pauseButton.setPrefSize(100, 100); // 与铲子按钮相同大小
+        pauseButton.setFont(Font.font("Arial", FontWeight.BOLD, 12));
+        pauseButton.setStyle("-fx-background-color: transparent;");
+        pauseButton.setDisable(true); // 初始状态禁用
+        // 设置暂停按钮位置，与铲子按钮之间保持10px的间距，再左移195px（分四次左移：50px+50px+80px+15px）
+        HBox.setMargin(pauseButton, new Insets(0, 0, 0, 30)); // 110 + 100 + 10 - 195 = 30
+        pauseButton.setOnAction(e -> {
+            pauseBattle();
+        });
+        plantSelector.getChildren().add(pauseButton); // 直接添加到植物选择栏中
 
-        // 将所有元素添加到主布局
-        mainLayout.getChildren().addAll(topBar, gameContainer, plantSelector, buttonBar);
+        buttonBar.getChildren().addAll(startButton, backButton); // 不再包含暂停按钮
+
+        // 直接设置按钮栏的垂直位置，使其向下移动更多距离
+        buttonBar.setLayoutY(80); // 向下移动80px
+
+        // 创建阳光显示容器
+        Pane sunDisplayContainer = new Pane();
+        sunDisplayContainer.setPrefSize(200, 50);
+        sunDisplayContainer.setLayoutX(10);
+        sunDisplayContainer.setLayoutY(595); // 向下移动600px
+        sunDisplayContainer.getChildren().add(sunAmountText);
+        sunDisplayContainer.setMouseTransparent(true); // 避免遮挡其他UI元素
+
+        // 添加一个空白占位元素，使按钮栏向下移动100px
+        Region spacer = new Region();
+        spacer.setPrefHeight(100);
+
+        // 将除了plantSelector之外的元素添加到主布局
+        mainLayout.getChildren().addAll(topBar, gameContainer, spacer, buttonBar);
+
         // 添加这一行代码，确保gameContainer在水平方向上居中
         mainLayout.setAlignment(Pos.TOP_CENTER);
+
+        // 设置植物选择栏的绝对位置
+        plantSelector.setLayoutX(plantSelectorX);
+        plantSelector.setLayoutY(plantSelectorY);
+
+        // 将所有元素添加到根容器
         root.getChildren().add(mainLayout);
+        root.getChildren().add(sunDisplayContainer);
+        root.getChildren().add(plantSelector);
     }
-    
+private void initZombieImageConfig(){
+                                                    // 普通僵尸：路径+4帧（示例：/zombies/normal/normal-0.png 到 normal-3.png）
+                                                    zombieImageBasePaths.put(ZombieType.NORMAL, "/zombies/normal/normal");
+                                                    zombieFrameCounts.put(ZombieType.NORMAL, 4);
+
+                                                    // 旗帜僵尸：路径+4帧
+                                                    zombieImageBasePaths.put(ZombieType.FLAG, "/zombies/flag/flag");
+                                                    zombieFrameCounts.put(ZombieType.FLAG, 4);
+
+                                                    // 铁桶僵尸：路径+4帧
+                                                    zombieImageBasePaths.put(ZombieType.BUCKETHEAD, "/zombies/buckethead/buckethead");
+                                                    zombieFrameCounts.put(ZombieType.BUCKETHEAD, 4);
+
+                                                    // 橄榄球僵尸：路径+4帧
+                                                    zombieImageBasePaths.put(ZombieType.FOOTBALL, "/zombies/football/football");
+                                                    zombieFrameCounts.put(ZombieType.FOOTBALL, 4);
+
+                                                    zombieImageBasePaths.put(ZombieType.CONEHEAD, "/zombies/conehead/conehead");
+                                                    zombieFrameCounts.put(ZombieType.CONEHEAD, 4);
+                                                }
     /**
      * 添加植物选择按钮到植物选择栏
      */
     private void addPlantButton(PlantType type) {
         VBox plantBox = new VBox(5);
         plantBox.setAlignment(Pos.CENTER);
-        
-        // 植物图标按钮
-        Button plantButton = new Button(type.name());
-        plantButton.setPrefSize(80, 150);
-        plantButton.setFont(Font.font("Arial", FontWeight.BOLD, 12));
-        plantButton.setStyle("-fx-background-color: #bc6c25; -fx-text-fill: white;");
-        
-        // 阳光成本显示
-        Text costText = new Text("" + type.getCost());
-        costText.setFont(Font.font("Arial", FontWeight.BOLD, 14));
-        costText.setFill(Color.YELLOW);
-        
-        plantBox.getChildren().addAll(plantButton, costText);
+
+        // 创建PlantCard对象，而不是普通Button
+        PlantCard plantCard = new PlantCard(type.name(), type.getCost());
+        plantCard.setPrefSize(plantButtonWidth, plantButtonHeight);
+        plantCard.setStyle("-fx-background-color: #bc6c25; -fx-text-fill: white;");
+
+        // 加载植物图片
+        String imagePath = plantImagePaths.get(type);
+        if (imagePath != null && !imagePath.isEmpty()) {
+            Image plantImage = ResourcePool.getInstance().getImage(imagePath);
+            if (plantImage != null) {
+                ImageView imageView = new ImageView(plantImage);
+                imageView.setFitWidth(plantButtonWidth); // 图片宽度与按钮宽度一致
+                imageView.setFitHeight(plantButtonHeight - 20); // 图片高度比按钮高度小20px，保持适当边距
+                imageView.setPreserveRatio(true);
+                plantCard.setGraphic(imageView); // 设置PlantCard的图标为植物图片
+
+                // 保存按钮视图引用
+                plantButtonViews.put(type, imageView);
+            }
+        }
+
+        // 不显示阳光成本数字
+        // 添加PlantCard到容器
+        plantBox.getChildren().add(plantCard);
         plantSelector.getChildren().add(plantBox);
-        
+
         // 设置按钮点击事件
-        plantButton.setOnAction(e -> {
+        plantCard.setOnAction(e -> {
             if (battleStarted) {
                 // 点击植物卡片时取消铲子模式
                 if (isShovelMode) {
                     isShovelMode = false;
                     shovelButton.setStyle("-fx-background-color: #6c757d; -fx-text-fill: white;");
                 }
-                if (selectedPlantType == type) {
-                    // 如果再次点击已选中的植物，则取消选择
-                    selectedPlantType = null;
-                    plantButton.setStyle("-fx-background-color: #bc6c25; -fx-text-fill: white;");
-                    battleStatusText.setText("已取消选择植物");
-                } else {
-                    // 检查阳光是否足够
-                    if (sunBankService.getSunAmount() >= type.getCost()) {
-                        // 先恢复其他按钮的样式
-                        for (javafx.scene.Node node : plantSelector.getChildren()) {
-                            if (node instanceof VBox) {
-                                VBox box = (VBox) node;
-                                if (box.getChildren().size() > 0 && box.getChildren().get(0) instanceof Button) {
-                                    Button btn = (Button) box.getChildren().get(0);
-                                    btn.setStyle("-fx-background-color: #bc6c25; -fx-text-fill: white;");
-                                }
+
+                if (plantCard.isReady() && sunBankService.getSunAmount() >= type.getCost()) {
+                    // 先恢复其他按钮的样式
+                    for (javafx.scene.Node node : plantSelector.getChildren()) {
+                        if (node instanceof VBox) {
+                            VBox box = (VBox) node;
+                            if (box.getChildren().size() > 0 && box.getChildren().get(0) instanceof PlantCard) {
+                                PlantCard card = (PlantCard) box.getChildren().get(0);
+                                if (!card.isReady()) continue;
+                                card.setStyle("-fx-background-color: #bc6c25; -fx-text-fill: white;");
                             }
                         }
-                        
-                        // 选中当前植物
-                        selectedPlantType = type;
-                        plantButton.setStyle("-fx-background-color: #fefae0; -fx-text-fill: #bc6c25;");
-                        battleStatusText.setText("已选择: " + type.name() + "，请点击格子放置");
-                    } else {
-                        battleStatusText.setText("阳光不足！");
                     }
+
+                    // 选中当前植物
+                    selectedPlantType = type;
+                    plantCard.setStyle("-fx-background-color: #fefae0; -fx-text-fill: #bc6c25;");
+                    battleStatusText.setText("已选择: " + type.name() + "，请点击格子放置");
+                } else if (!plantCard.isReady()) {
+                    battleStatusText.setText("植物冷却中...");
+                } else {
+                    battleStatusText.setText("阳光不足！");
                 }
             } else {
                 battleStatusText.setText("请先开始战斗！");
             }
         });
+        // 添加鼠标悬停效果到PlantCard
+        plantCard.setOnMouseEntered(e -> {
+            if (plantCard.isReady()) {
+                plantCard.setStyle("-fx-background-color: #dda15e; -fx-text-fill: white;");
+            }
+        });
+
+        plantCard.setOnMouseExited(e -> {
+            if (plantCard.isReady() && selectedPlantType != type) {
+                plantCard.setStyle("-fx-background-color: #bc6c25; -fx-text-fill: white;");
+            } else if (selectedPlantType == type) {
+                plantCard.setStyle("-fx-background-color: #fefae0; -fx-text-fill: #bc6c25;");
+            }
+        });
+    }
+
+    /**
+     * 设置植物选择按钮大小
+     */
+    public void setPlantButtonSize(double width, double height) {
+        this.plantButtonWidth = width;
+        this.plantButtonHeight = height;
+        // 更新植物选择栏布局
+        updatePlantSelectorLayout();
+    }
+
+    /**
+     * 设置植物选择按钮间距
+     */
+    public void setPlantButtonSpacing(double spacing) {
+        this.plantButtonSpacing = spacing;
+        plantSelector.setSpacing(spacing);
+    }
+
+    /**
+     * 设置植物选择栏内边距
+     */
+    public void setPlantSelectorPadding(double padding) {
+        this.plantSelectorPadding = padding;
+        plantSelector.setPadding(new Insets(padding));
+    }
+
+    /**
+     * 设置植物选择栏位置
+     */
+    public void setPlantSelectorPosition(double x, double y) {
+        this.plantSelectorX = x;
+        this.plantSelectorY = y;
+        plantSelector.setLayoutX(x);
+        plantSelector.setLayoutY(y);
+    }
+
+    /**
+     * 更新植物选择栏布局
+     */
+    private void updatePlantSelectorLayout() {
+        // 更新位置
+        plantSelector.setLayoutX(plantSelectorX);
+        plantSelector.setLayoutY(plantSelectorY);
+
+        // 更新按钮大小和样式
+        for (javafx.scene.Node node : plantSelector.getChildren()) {
+            if (node instanceof VBox) {
+                VBox box = (VBox) node;
+                if (box.getChildren().size() > 0 && box.getChildren().get(0) instanceof Button) {
+                    Button btn = (Button) box.getChildren().get(0);
+
+                    // 跳过铲子按钮，保持我们设置的70*70大小
+                    if (!btn.getText().equals("铲子")) {
+                        btn.setPrefSize(plantButtonWidth, plantButtonHeight);
+
+                        // 更新按钮图片大小（与按钮大小成比例）
+                        if (btn.getGraphic() instanceof ImageView) {
+                            ImageView imageView = (ImageView) btn.getGraphic();
+                            imageView.setFitWidth(plantButtonWidth); // 图片宽度与按钮宽度一致
+                            imageView.setFitHeight(plantButtonHeight - 20); // 图片高度比按钮高度小20px，保持适当边距
+                        }
+
+                        // 确保按钮样式完全透明
+                        btn.setStyle("-fx-background-color: transparent; -fx-border-color: transparent; -fx-background-radius: 0; -fx-background-insets: 0; -fx-border-width: 0;");
+                    }
+                }
+            }
+        }
     }
     
     public int getLevel() {
@@ -398,21 +633,21 @@ public class BattleScene extends Scene {
             battleStatusText.setText("战斗进行中...");
             startButton.setDisable(true);
             startButton.setText("战斗中");
+            pauseButton.setDisable(false); // 启用暂停按钮
 
-            // 启动游戏循环
+            // 记录战斗开始时间
+            battleStartTime = System.currentTimeMillis();
+            battleProgress = 0;
+            stopSpawningZombies = false;
             ((GameLoopServiceImpl) gameLoopService).setSpawnService(spawnService);
             gameLoopService.start();
 
-            // 开始自动生成阳光
-            new Thread(this::sunGenerationTask).start();
-
-            // 直接创建并渲染一个僵尸，用于测试渲染逻辑
-            System.out.println("直接创建并渲染一个测试僵尸...");
-            Position position = new Position(984, 1 * 82 + 5); // 在第2个车道，使用与renderZombie相同的位置计算
-            Zombie testZombie = ZombieFactory.getInstance().createZombie(ZombieType.NORMAL, position, 1);
-            zombies.add(testZombie);
-            renderZombie(testZombie, 1);
-            System.out.println("测试僵尸已添加到场景");
+            // 开始自动生成阳光，保存线程引用
+            sunGenerationThread = new Thread(this::sunGenerationTask);
+            sunGenerationThread.setDaemon(true); // 设置为守护线程，避免阻止程序退出
+            sunGenerationThread.start();
+            // 使用我们的新方法启动僵尸生成任务
+            startZombieSpawnTask();
 
 
             System.out.println("开始关卡 " + level + " 的战斗！");
@@ -435,10 +670,15 @@ public class BattleScene extends Scene {
         if (sunBankService.getSunAmount() >= type.getCost()) {
             // 扣除阳光
             sunBankService.removeSun(type.getCost());
-            sunAmountText.setText("阳光: " + sunBankService.getSunAmount());
+
+            sunAmountText.setText("       " + sunBankService.getSunAmount());
             
             // 创建植物实体
-            Position position = new Position(col * (80 + 2) + 5, row * (80 + 2) + 5);
+            double x = col * (80 + 2);
+            double y = row *82+5;
+
+
+            Position position = new Position(x, y);
             Plant plant = PlantFactory.getInstance().createPlant(type, position);
             plants.add(plant);
             
@@ -446,21 +686,35 @@ public class BattleScene extends Scene {
             if (type == PlantType.CHERRY_BOMB) {
                 plant.setPlantedTime(System.currentTimeMillis());
             }
-            
+
             // 渲染植物（用方块代表）
             renderPlant(plant, cell, type);
-            
+            // 启动植物冷却
+            for (javafx.scene.Node node : plantSelector.getChildren()) {
+                if (node instanceof VBox) {
+                    VBox box = (VBox) node;
+                    if (box.getChildren().size() > 0 && box.getChildren().get(0) instanceof PlantCard) {
+                        PlantCard card = (PlantCard) box.getChildren().get(0);
+                        if (card.getPlantType().equals(type.name())) {
+                            card.startCooldown(type.getCooldown());
+                            break;
+                        }
+                    }
+                }
+            }
+
             battleStatusText.setText("已放置: " + type.name());
-            
+
             // 取消选中状态
             selectedPlantType = null;
-            // 恢复按钮样式
+            // 恢复按钮样式，保持透明背景
             for (javafx.scene.Node node : plantSelector.getChildren()) {
                 if (node instanceof VBox) {
                     VBox box = (VBox) node;
                     if (box.getChildren().size() > 0 && box.getChildren().get(0) instanceof Button) {
                         Button btn = (Button) box.getChildren().get(0);
-                        btn.setStyle("-fx-background-color: #bc6c25; -fx-text-fill: white;");
+                        btn.setStyle("-fx-background-color: transparent; -fx-border-color: transparent; -fx-background-radius: 0; -fx-background-insets: 0; -fx-border-width: 0;");
+
                     }
                 }
             }
@@ -472,23 +726,148 @@ public class BattleScene extends Scene {
     /**
      * 渲染植物（用方块代表）
      */
+
     private void renderPlant(Plant plant, Pane cell, PlantType type) {
-        // 根据植物类型设置不同颜色的方块
-        Region plantView = new Region();
-        plantView.setPrefSize(70, 70);
-        plantView.setStyle(getPlantStyleByType(type));
-        
-        // 设置居中
+        // 1. 加载该植物的所有序列帧图片
+        List<Image> frames = loadPlantFrames(type);
+        if (frames.isEmpty()) {
+            // 若图片加载失败，回退到方块显示
+            renderFallbackSquare(plant, cell, type);
+            return;
+        }
+
+        // 2. 创建ImageView作为动画载体
+        ImageView plantView = new ImageView(frames.get(0)); // 初始显示第一帧
+        plantView.setFitWidth(70);  // 适配格子大小
+        plantView.setFitHeight(70);
+        plantView.setPreserveRatio(true); // 保持图片比例
+
+        // 3. 居中显示
         plantView.setLayoutX(5);
         plantView.setLayoutY(5);
-        
-        // 添加到单元格
+
+        // 4. 添加到单元格
         cell.getChildren().add(plantView);
+
+        // 5. 播放放置动画（可选，增强体验）
+//        playPlacementAnimation(plantView);
+
+        // 6. 播放循环帧动画
+        Timeline frameAnimation = createFrameAnimation(plantView, frames);
+        frameAnimation.play();
+
+        // 7. 保存动画引用，便于后续停止
+
     }
-    
+
     /**
-     * 根据植物类型获取对应的样式
+     * 加载植物的序列帧图片
      */
+    private List<Image> loadPlantFrames(PlantType type) {
+        List<Image> frames = new ArrayList<>();
+        String basePath;
+
+        // 根据植物类型设置图片路径
+        switch (type) {
+            case SUNFLOWER:
+                basePath = "/plants/sunflower/sunflower-";
+                break;
+            case PEASHOOTER:
+                basePath = "/plants/peashooter/peashooter-";
+                break;
+            case WALLNUT:
+                basePath = "/plants/wallnut/wallnut-";
+                break;
+            case CHERRY_BOMB:
+                basePath = "/plants/cherrybomb/cherry_bomb-";
+                break;
+            case REPEATER:
+                basePath = "/plants/repeater/repeater-";
+                break;
+            default:
+                return frames; // 未知类型返回空列表
+        }
+
+        // 加载n帧（可根据实际图片数量调整）
+        int framenum = 0;
+        switch (type)
+        {
+            case SUNFLOWER:
+                framenum=4;
+                break;
+            case PEASHOOTER:
+                framenum=6;
+                break;
+            case WALLNUT:
+                framenum=3;
+                break;
+            case CHERRY_BOMB:
+                 framenum=7;
+                break;
+            case REPEATER:
+                 framenum=7;
+                break;
+        }
+        for (int i = 0; i <framenum; i++) {
+            try {
+                Image frame = new Image(getClass().getResourceAsStream(basePath + (i+1) + ".png"));
+                if (!frame.isError()) {
+                    frames.add(frame);
+                }
+            } catch (Exception e) {
+                System.err.println("加载动画帧失败: " + basePath + i + ".png");
+            }
+        }
+        return frames;
+    }
+
+    /**
+     * 创建帧动画（循环切换图片）
+     */
+    private Timeline createFrameAnimation(ImageView plantView, List<Image> frames) {
+        int frameCount = frames.size();
+        Timeline timeline = new Timeline();
+        timeline.setCycleCount(Timeline.INDEFINITE); // 无限循环
+
+        // 每100ms切换一帧（可调整速度）
+        Duration frameDuration = Duration.millis(200);
+
+        for (int i = 0; i < frameCount; i++) {
+            final int frameIndex = i;
+            KeyFrame keyFrame = new KeyFrame(
+                    frameDuration.multiply(i),  // 第i帧的时间点
+                    e -> plantView.setImage(frames.get(frameIndex)) // 切换到第i帧
+            );
+            timeline.getKeyFrames().add(keyFrame);
+        }
+
+        // 最后一帧后回到第一帧，形成循环
+        KeyFrame lastFrame = new KeyFrame(
+                frameDuration.multiply(frameCount),
+                e -> plantView.setImage(frames.get(0))
+        );
+        timeline.getKeyFrames().add(lastFrame);
+
+        return timeline;
+    }
+
+    /**
+     * 放置时的过渡动画（缩放效果）
+     */
+//    private void playPlacementAnimation(ImageView plantView) {
+//        plantView.setScaleX(0.5);
+//        plantView.setScaleY(0.5);
+//
+//        Timeline timeline = new Timeline(
+//                new KeyFrame(Duration.millis(200),
+//                        e -> {
+//                            plantView.setScaleX(1);
+//                            plantView.setScaleY(1);
+//                        })
+//        );
+//        timeline.play();
+//    }
+
     private String getPlantStyleByType(PlantType type) {
         switch (type) {
             case SUNFLOWER:
@@ -505,32 +884,82 @@ public class BattleScene extends Scene {
                 return "-fx-background-color: #6495ED; -fx-border-color: #4169E1; -fx-border-width: 2;";
         }
     }
+    private void renderFallbackSquare(Plant plant, Pane cell, PlantType type) {
+        // 复用之前的方块渲染逻辑
+        Region plantView = new Region();
+        plantView.setPrefSize(70, 70);
+        plantView.setStyle(getPlantStyleByType(type));
+        plantView.setLayoutX(5);
+        plantView.setLayoutY(5);
+        cell.getChildren().add(plantView);
+    }
+//    private void renderPlant(Plant plant, Pane cell, PlantType type) {
+//        // 根据植物类型设置不同颜色的方块
+//        Region plantView = new Region();
+//        plantView.setPrefSize(70, 70);
+//        plantView.setStyle(getPlantStyleByType(type));
+//
+//        // 设置居中
+//        plantView.setLayoutX(5);
+//        plantView.setLayoutY(5);
+//
+//        // 添加到单元格
+//        cell.getChildren().add(plantView);
+//    }
+//
+//    /**
+//     * 根据植物类型获取对应的样式
+//     */
+//    private String getPlantStyleByType(PlantType type) {
+//        switch (type) {
+//            case SUNFLOWER:
+//                return "-fx-background-color: #FFD700; -fx-border-color: #FFA500; -fx-border-width: 2;";
+//            case PEASHOOTER:
+//                return "-fx-background-color: #32CD32; -fx-border-color: #228B22; -fx-border-width: 2;";
+//            case WALLNUT:
+//                return "-fx-background-color: #D2B48C; -fx-border-color: #A0522D; -fx-border-width: 2;";
+//            case CHERRY_BOMB:
+//                return "-fx-background-color: #FF0000; -fx-border-color: #8B0000; -fx-border-width: 2;";
+//            case REPEATER:
+//                return "-fx-background-color: #00FF00; -fx-border-color: #008000; -fx-border-width: 2;";
+//            default:
+//                return "-fx-background-color: #6495ED; -fx-border-color: #4169E1; -fx-border-width: 2;";
+//        }
+//    }
     
     public void stopBattle() {
         if (battleStarted) {
             battleStarted = false;
+            gameOver = false; // 重置游戏结束状态
             battleStatusText.setText("战斗已停止");
             startButton.setDisable(false);
             startButton.setText("开始战斗");
-
-            // 停止游戏循环
+            pauseButton.setDisable(true); // 禁用暂停按钮
             gameLoopService.stop();
+            stopSpawningZombies = true;
 
+            // 中断僵尸生成线程
+            if (zombieSpawnThread != null && zombieSpawnThread.isAlive()) {
+                zombieSpawnThread.interrupt();
+                zombieSpawnThread = null;
+            }
+
+            // 中断阳光生成线程
+            if (sunGenerationThread != null && sunGenerationThread.isAlive()) {
+                sunGenerationThread.interrupt();
+                sunGenerationThread = null;
+            }
             // 清空所有阳光
             javafx.application.Platform.runLater(() -> {
                 sunLayer.getChildren().clear();
                 activeSuns.clear();
             });
 
-            // 清理僵尸
-            cleanupZombies();
-
-            // 清理子弹
-            if (projectileLayer != null) {
-                projectileLayer.getChildren().clear();
-            }
+            // 清空游戏中的所有实体
+            plants.clear();
+            zombies.clear();
             projectiles.clear();
-            projectileViews.clear();
+            activeSuns.clear();
 
             System.out.println("停止战斗！");
         }
@@ -555,43 +984,208 @@ public class BattleScene extends Scene {
     }
     
     /**
-     * 渲染僵尸
+     * 渲染僵尸（支持动画，替代原占位符逻辑）
      */
-    private void renderZombie(Zombie zombie, int laneIndex) {
-        try {
-            // 检查游戏容器和僵尸层是否存在
-            if (gameContainer == null || zombieLayer == null) {
-                System.err.println("游戏容器或僵尸层未找到");
-                return;
+                    private void renderZombie(Zombie zombie, int laneIndex) {
+                        try {
+                            if (gameContainer == null || zombieLayer == null) {
+                                System.err.println("游戏容器或僵尸层未找到");
+                                return;
+                            }
+                            System.out.println("渲染僵尸: " + zombie.getType() + " 在车道 " + laneIndex + "，ID: " + zombie.getId());
+
+                            // 1. 计算初始位置（从右侧进入，与原有逻辑一致）
+                            double x = 1200;
+                            double y = laneIndex * 82 - 20;
+
+                            // 2. 创建僵尸容器（承载动画视图）
+                            Pane zombieContainer = new Pane();
+                            zombieContainer.setPrefSize(70, 70); // 与原有占位符大小一致
+                            zombieContainer.setLayoutX(x);
+                            zombieContainer.setLayoutY(y);
+
+                            // 3. 初始化僵尸状态为“行走”
+                            zombieStates.put(zombie.getId(), ZombieState.WALKING);
+
+                            // 4. 加载走路动画并添加到容器
+                            ImageView zombieView = loadZombieAnimation(zombie, ZombieState.WALKING);
+                            if (zombieView != null) {
+                                zombieContainer.getChildren().add(zombieView);
+                                // 保存僵尸视图引用（替换原有占位符逻辑）
+                                zombieViews.put(zombie.getId(), zombieView);
+                            } else {
+                                // 图片加载失败时，回退到彩色方块（兼容原有逻辑）
+                                addPlaceholderToContainer(zombieContainer, zombie);
+                            }
+
+                            // 5. 保存容器与动画时间线
+                            zombieContainers.put(zombie.getId(), zombieContainer);
+                            zombieLayer.getChildren().add(zombieContainer);
+                            System.out.println("僵尸已添加到屏幕: " + zombie.getId() + " 位置: (" + x + ", " + y + ")");
+
+                        } catch (Exception e) {
+                            System.err.println("渲染僵尸错误: " + e.getMessage());
+                            e.printStackTrace();
+                        }
+                    }
+
+//    private void renderZombie(Zombie zombie, int laneIndex) {
+//        try {
+//            // 检查游戏容器和僵尸层是否存在
+//            if (gameContainer == null || zombieLayer == null) {
+//                System.err.println("游戏容器或僵尸层未找到");
+//                return;
+//            }
+//            // 添加调试日志
+//            System.out.println("渲染僵尸: " + zombie.getType() + " 在车道 " + laneIndex);
+//
+//            // 设置僵尸初始位置（从右侧进入）
+//
+//            double x = 984; // 使用固定值，确保从屏幕右侧进入
+//            double y = laneIndex *82 + 5;  // 放置在对应车道
+//
+//
+//            // 创建僵尸视图容器
+//            Pane zombieContainer = new Pane();
+//            zombieContainer.setPrefSize(70, 70);
+//            zombieContainer.setLayoutX(x);
+//            zombieContainer.setLayoutY(y);
+//
+//            // 直接使用彩色方块作为占位符
+//            addPlaceholderToContainer(zombieContainer, zombie);
+//
+//            // 保存僵尸容器到映射中，以便更新位置
+//            zombieContainers.put(zombie.getId(), zombieContainer);
+//
+//            // 添加到僵尸层
+//            zombieLayer.getChildren().add(zombieContainer);
+//            System.out.println("僵尸已添加到屏幕: " + zombie.getId() + " 位置: (" + x + ", " + y + ")");
+//        } catch (Exception e) {
+//            System.err.println("渲染僵尸错误: " + e.getMessage());
+//            e.printStackTrace();
+//        }
+//    }
+                                                                    private ImageView loadZombieAnimation(Zombie zombie, ZombieState targetState) {
+                                                                        UUID zombieId = zombie.getId();
+                                                                        ZombieType type = zombie.getType();
+
+                                                                        // 1. 获取当前僵尸的视图（若已存在则复用，避免重复创建）
+                                                                        ImageView zombieView = zombieViews.get(zombieId);
+                                                                        if (zombieView == null) {
+                                                                            zombieView = new ImageView();
+                                                                            zombieView.setFitWidth(100);  // 与容器大小匹配
+                                                                            zombieView.setFitHeight(100);
+                                                                            zombieView.setPreserveRatio(true);
+                                                                        }
+
+                                                                        // 2. 停止当前动画（避免多动画冲突）
+                                                                        Timeline existingTimeline = zombieAnimationTimelines.get(zombieId);
+                                                                        if (existingTimeline != null) {
+                                                                            existingTimeline.stop();
+                                                                        }
+
+                                                                        // 3. 加载目标状态的序列帧（按“类型+状态”拼接路径）
+                                                                        String basePath = zombieImageBasePaths.get(type);
+                                                                        int frameCount = zombieFrameCounts.getOrDefault(type, 4);
+                                                                        List<Image> frames = new ArrayList<>();
+
+                                                                        // 拼接路径规则：基础路径 + 状态缩写 + 帧索引 + .png
+                                                                        // 示例：普通僵尸走路帧 → /zombies/normal/normal-walk-0.png
+                                                                        String stateSuffix;
+                                                                        if (targetState == ZombieState.WALKING) {
+                                                                            stateSuffix = "run-";
+                                                                        } else if (targetState == ZombieState.ATTACKING) {
+                                                                            stateSuffix = "-"; // 明确攻击状态的后缀，避免使用模糊的"-"
+                                                                        } else if (targetState == ZombieState.DEAD) {
+                                                                            stateSuffix = "death-"; // 死亡状态专用后缀
+                                                                        } else {
+                                                                            stateSuffix = ""; // 默认值
+                                                                        }
+                                                                        for (int i = 0; i < frameCount; i++) {
+                                                                            String imagePath = basePath + stateSuffix + (i+1) + ".png";
+                                                                            try {
+                                                                                Image frame = new Image(getClass().getResourceAsStream(imagePath));
+                                                                                if (!frame.isError()) {
+                                                                                    frames.add(frame);
+                                                                                } else {
+                                                                                    System.err.println("僵尸帧图片加载失败（无效图片）: " + imagePath);
+                                                                                }
+                                                                            } catch (Exception e) {
+                                                                                System.err.println("僵尸帧图片加载异常: " + imagePath + "，原因: " + e.getMessage());
+                                                                            }
+                                                                        }
+
+                                                                        // 4. 若帧加载失败，回退到占位符
+                                                                        if (frames.isEmpty()) {
+                                                                            System.err.println("僵尸 " + type + " " + targetState + " 动画帧加载失败，使用占位符");
+                                                                            return null;
+                                                                        }
+
+                                                                        // 5. 创建动画时间线（循环播放序列帧）
+                                                                        Timeline timeline = new Timeline();
+                                                                        timeline.setCycleCount(Timeline.INDEFINITE); // 无限循环
+                                                                        Duration frameInterval = Duration.millis(200); // 每帧间隔200ms（可调整速度）
+
+                                                                        // 添加每帧的切换逻辑
+                                                                        // 循环创建关键帧（逐帧播放动画）
+                                                                        for (int i = 0; i < frames.size(); i++) {
+                                                                            // 关键：为每个循环迭代创建独立的final变量，避免Lambda捕获变化的i
+                                                                            final int currentFrameIndex = i;
+                                                                            ImageView finalZombieView1 = zombieView;
+                                                                            KeyFrame keyFrame = new KeyFrame(
+                                                                                    // 时间点使用currentFrameIndex（与Lambda中保持一致）
+                                                                                    frameInterval.multiply(currentFrameIndex),
+                                                                                    e -> finalZombieView1.setImage(frames.get(currentFrameIndex))
+                                                                            );
+                                                                            timeline.getKeyFrames().add(keyFrame);
+                                                                        }
+                                                                        final int firstFrame = 0;
+                                                                        ImageView finalZombieView = zombieView;
+                                                                        KeyFrame loopFrame = new KeyFrame(
+                                                                                frameInterval.multiply(frames.size()),
+                                                                                e -> finalZombieView.setImage(frames.get(firstFrame))
+                                                                        );
+                                                                        timeline.getKeyFrames().add(loopFrame);
+
+
+                                                                        // 6. 保存时间线并启动动画
+                                                                        zombieAnimationTimelines.put(zombieId, timeline);
+                                                                        timeline.play();
+
+                                                                        return zombieView;
+                                                                    }
+                                    private void switchZombieState(UUID zombieId, ZombieState newState) {
+                                        // 1. 校验状态合法性（避免重复切换）
+                                        ZombieState currentState = zombieStates.getOrDefault(zombieId, ZombieState.WALKING);
+                                        if (currentState == newState) {
+                                            return;
+                                        }
+
+                                        // 2. 更新状态
+                                        zombieStates.put(zombieId, newState);
+
+                                        // 3. 获取僵尸对象与视图
+                                        Zombie zombie = getZombieById(zombieId); // 需实现：根据ID从zombies列表中找僵尸
+                                        if (zombie == null) {
+                                            System.err.println("切换状态失败：未找到僵尸 ID: " + zombieId);
+                                            return;
+                                        }
+
+                                        // 4. 切换动画（根据新状态加载对应序列帧）
+                                        loadZombieAnimation(zombie, newState);
+                                    }
+
+    /**
+     * 工具方法：根据ID获取僵尸对象（需实现）
+     */
+    private Zombie getZombieById(UUID zombieId) {
+        for (Zombie zombie : zombies) {
+            if (zombie.getId().equals(zombieId)) {
+                return zombie;
             }
-            // 添加调试日志
-            System.out.println("渲染僵尸: " + zombie.getType() + " 在车道 " + laneIndex);
-            
-            // 设置僵尸初始位置（从右侧进入）
-
-            double x = 984; // 使用固定值，确保从屏幕右侧进入
-            double y = laneIndex *82 + 5;  // 放置在对应车道
-
-            
-            // 创建僵尸视图容器
-            Pane zombieContainer = new Pane();
-            zombieContainer.setPrefSize(70, 70);
-            zombieContainer.setLayoutX(x);
-            zombieContainer.setLayoutY(y);
-            
-            // 直接使用彩色方块作为占位符
-            addPlaceholderToContainer(zombieContainer, zombie);
-            
-            // 保存僵尸容器到映射中，以便更新位置
-            zombieContainers.put(zombie.getId(), zombieContainer);
-
-            // 添加到僵尸层
-            zombieLayer.getChildren().add(zombieContainer);
-            System.out.println("僵尸已添加到屏幕: " + zombie.getId() + " 位置: (" + x + ", " + y + ")");
-        } catch (Exception e) {
-            System.err.println("渲染僵尸错误: " + e.getMessage());
-            e.printStackTrace();
         }
+        return null;
+
     }
 
     /**
@@ -610,11 +1204,17 @@ public class BattleScene extends Scene {
             case FLAG:
                 style = "-fx-background-color: #CD5C5C; -fx-border-color: #B22222; -fx-border-width: 2;";
                 break;
+            case CONEHEAD:
+                style = "-fx-background-color: #228B22; -fx-border-color: #006400; -fx-border-width: 2;";
+                break;
             case BUCKETHEAD:
                 style = "-fx-background-color: #708090; -fx-border-color: #4682B4; -fx-border-width: 2;";
                 break;
             case FOOTBALL:
                 style = "-fx-background-color: #FFD700; -fx-border-color: #FFA500; -fx-border-width: 2;";
+                break;
+            case GARGANTUAR:
+                style = "-fx-background-color: #800000; -fx-border-color: #660000; -fx-border-width: 3;";
                 break;
             default:
                 style = "-fx-background-color: #8B4513; -fx-border-color: #654321; -fx-border-width: 2;";
@@ -648,14 +1248,16 @@ public class BattleScene extends Scene {
      * 阳光自动生成任务
      */
     private void sunGenerationTask() {
-        while (battleStarted) {
+        while (battleStarted&& !gameOver&& !isPaused) {
             try {
                 // 每5秒生成一些阳光
                 Thread.sleep(2000+random.nextInt(5000));
 
                 // 在JavaFX应用线程中更新UI
                 javafx.application.Platform.runLater(() -> {
-                    spawnSun();
+                    if (!isPaused) { // 再次检查暂停状态
+                        spawnSun();
+                    }
                 });
             } catch (InterruptedException e) {
                 Thread.currentThread().interrupt();
@@ -668,60 +1270,166 @@ public class BattleScene extends Scene {
         int sunValue = 25; // 阳光价值
 
         int x = 30 + random.nextInt(924); // 随机X坐标 (确保在984宽度内)
-        int y = 30 + random.nextInt(400); // 随机Y坐标 (确保在500高度内)
+        int startY = -30; // 从屏幕顶部外开始
+        int targetY = 30 + random.nextInt(400); // 目标Y坐标 (确保在500高度内)
 
-        Position position = new Position(x, y);
+        //Position position = new Position(x, y);
 
-        // 创建阳光实体
-        Sun sun = new Sun(position, sunValue);
+        // 创建阳光实体，并存储目标位置信息
+        Sun sun = new Sun(new Position(x, startY), sunValue);
         activeSuns.add(sun);
-
+        fallingSuns.add(sun);
+        // 存储目标位置到sun对象
+        sunTargetPositions.put(sun, (double) targetY);
         // 创建阳光的可视化表示
-        Circle sunVisual = new Circle(position.x(), position.y(), 15);
-        sunVisual.setFill(Color.YELLOW);
-        sunVisual.setStroke(Color.GOLD);
-        sunVisual.setStrokeWidth(2);
+
+//        final Sun sun = new Sun(new Position(x, startY), sunValue);
+//        activeSuns.add(sun);
+//        fallingSuns.add(sun);
+//        sunTargetPositions.put(sun, (double) targetY);
+
+// 创建阳光的可视化表示（使用自定义图片）
+        ImageView sunVisual;
+        ImageView sunVisual1=null;
+        try {
+            // 加载自定义阳光图片（替换为你的图片路径）
+            // 建议使用透明背景的PNG图片
+            Image sunImage = new Image(Objects.requireNonNull(getClass().getResourceAsStream("/pic/sun.png")));
+
+            sunVisual1 = new ImageView(sunImage);
+            // 设置图片大小（根据你的图片尺寸调整）
+            sunVisual1.setFitWidth(60);  // 宽度
+            sunVisual1.setFitHeight(60); // 高度
+            sunVisual1.setPreserveRatio(true); // 保持图片比例
+
+            // 计算位置（使图片中心与原圆形中心一致）
+            sunVisual1.setX(x - sunVisual1.getFitWidth() / 2);
+            sunVisual1.setY(startY - sunVisual1.getFitHeight());
+
+
+        } catch (Exception e) {
+            // 图片加载失败时使用备用圆形
+            System.err.println("阳光图片加载失败，使用备用图形: " + e.getMessage());
+            sunVisual1 = new ImageView();
+            // 创建备用圆形
+            Circle fallbackCircle = new Circle(x, startY, 15);
+            fallbackCircle.setFill(Color.YELLOW);
+            fallbackCircle.setStroke(Color.GOLD);
+            fallbackCircle.setStrokeWidth(2);
+            // 将圆形添加到面板（实际项目中可使用更优雅的处理方式）
+            gamePanel.getChildren().add(fallbackCircle);
+        }
+
+// 确保sunVisuals是Map<Sun, Node>类型
+//        sunVisuals.put(sun, sunVisual);
+//        gamePanel.getChildren().add(sunVisual);
+
+//        Circle sunVisual = new Circle(x, startY, 15);
+//        sunVisual.setFill(Color.YELLOW);
+//        sunVisual.setStroke(Color.GOLD);
+//        sunVisual.setStrokeWidth(2);
 
         // 添加点击事件
+        sunVisual = sunVisual1;
+
         sunVisual.setOnMouseClicked(e -> {
             if (!sun.isCollected()) {
-                collectSun(sun, sunVisual);
+                collectSun(sun, sunVisual, sunTargetPositions);
             }
         });
 
         // 添加到阳光层
         sunLayer.getChildren().add(sunVisual);
 
+        // 存储阳光视图引用，用于更新位置
+        final Map<Sun, Node> sunViews = new HashMap<>();
+        sunViews.put(sun, sunVisual);
         battleStatusText.setText("阳光出现了！");
+       // 创建下落动画
 
-        // 阳光自动消失的定时器
-        new Thread(() -> {
-            try {
-                Thread.sleep(10000); // 10秒后自动消失
-                javafx.application.Platform.runLater(() -> {
-                    if (!sun.isCollected()) {
-                        sunLayer.getChildren().remove(sunVisual);
-                        activeSuns.remove(sun);
+        Timeline timeline = new Timeline(
+                new KeyFrame(Duration.millis(20), event -> {
+                    if (sun.isCollected() || !activeSuns.contains(sun)) {
+                        return;
                     }
-                });
+
+                    // 获取当前位置和目标位置
+                    Position currentPos = sun.getPosition();
+                    double targetYPos = sunTargetPositions.get(sun);
+                    ImageView visual = (ImageView) sunViews.get(sun);
+
+
+                    // 如果还没到达目标位置，继续下落
+                    if (currentPos.y() < targetYPos) {
+                        // 计算新位置（带加速度的下落效果）
+                        double newY = currentPos.y() + 2 + (currentPos.y() - startY) * 0.01;
+
+                        // 更新实体位置
+                        Position newPos = new Position(currentPos.x(), newY);
+                        sun.setPosition(newPos);
+
+                        // 更新视图位置
+                        visual.setY(newY);
+                    } else {
+                        // 到达目标位置后，开始轻微晃动
+                        double wiggleAmount = Math.sin(System.currentTimeMillis() * 0.01) * 3;
+                        visual.setY(targetYPos + wiggleAmount);
+                    }
+                })
+        );
+        timeline.setCycleCount(Timeline.INDEFINITE);
+        timeline.play();
+
+        // 阳光自动消失的定时器 - 修改为考虑暂停状态
+        Thread sunThread = new Thread(() -> {
+            try {
+                long startTime = System.currentTimeMillis();
+                long elapsedTime = 0;
+                // 总持续时间10秒
+                long totalDuration = 10000;
+
+                // 循环检查，直到达到总持续时间或阳光被收集或线程中断
+                while (elapsedTime < totalDuration && !sun.isCollected() && !Thread.currentThread().isInterrupted()) {
+                    if (!isPaused) {
+                        // 游戏未暂停时才增加已过时间
+                        elapsedTime = System.currentTimeMillis() - startTime;
+                    }
+                    // 短暂睡眠，避免CPU占用过高
+                    Thread.sleep(100);
+                }
+
+                if (!Thread.currentThread().isInterrupted() && !sun.isCollected()) {
+                    javafx.application.Platform.runLater(() -> {
+                        if (!sun.isCollected()) {
+                            sunLayer.getChildren().remove(sunVisual);
+                            activeSuns.remove(sun);
+                            fallingSuns.remove(sun);
+                            sunTargetPositions.remove(sun);
+                        }
+                    });
+                }
             } catch (InterruptedException e) {
                 Thread.currentThread().interrupt();
             }
-        }).start();
+        });
+        sunThread.setDaemon(true);
+        sunThread.start();
     }
     /**
      * 收集阳光
      */
-    private void collectSun(Sun sun, Circle sunVisual) {
+    private void collectSun(Sun sun, Node sunVisual, Map<Sun, Double> sunTargetPositions) {
         sun.collect();
         sunBankService.addSun(sun.getValue());
-        sunAmountText.setText("阳光: " + sunBankService.getSunAmount());
+        sunAmountText.setText("   " + sunBankService.getSunAmount());
         battleStatusText.setText("获得阳光 +" + sun.getValue());
-        System.out.println("阳光被收集，当前阳光数量: " + sunBankService.getSunAmount()); // 添加调试信息
+        System.out.println("阳光被收集，当前阳光数量: " + sunBankService.getSunAmount());
 
         // 从UI中移除阳光
         sunLayer.getChildren().remove(sunVisual);
         activeSuns.remove(sun);
+        fallingSuns.remove(sun);
+        sunTargetPositions.remove(sun);
     }
     /**
      * 设置UI更新循环
@@ -731,7 +1439,9 @@ public class BattleScene extends Scene {
         AnimationTimer timer = new AnimationTimer() {
             @Override
             public void handle(long now) {
-                if (battleStarted) {
+                if (battleStarted&& !gameOver&& !isPaused) {
+                    // 更新游戏进度
+                    updateBattleProgress();
                     // 更新僵尸位置
                     updateZombies();
 
@@ -741,145 +1451,326 @@ public class BattleScene extends Scene {
 
                     // 更新子弹位置
                     updateProjectiles();
+                    // 检查游戏胜利条件
+                    checkGameVictory();
                 }
             }
         };
         timer.start();
     }
-    
+    /**
+     * 根据关卡获取应该生成的僵尸类型
+     * @return 该关卡可能生成的僵尸类型数组
+     */
+    private List<ZombieType> getZombieTypesByLevel() {
+        List<ZombieType> zombieTypes = new ArrayList<>();
+        switch (level) {
+            case 1:
+                // 第一关：
+                zombieTypes.add(ZombieType.NORMAL);
+                zombieTypes.add(ZombieType.FLAG);
+                zombieTypes.add(ZombieType.CONEHEAD);
+                break;
+            case 2:
+                // 第二关：
+                zombieTypes.add(ZombieType.NORMAL);
+                zombieTypes.add(ZombieType.FLAG);
+                zombieTypes.add(ZombieType.CONEHEAD);
+                zombieTypes.add(ZombieType.BUCKETHEAD);
+                break;
+            case 3:
+                // 第三关：生成所有类型的僵尸
+                zombieTypes.add(ZombieType.NORMAL);
+                zombieTypes.add(ZombieType.FLAG);
+                zombieTypes.add(ZombieType.BUCKETHEAD);
+                zombieTypes.add(ZombieType.CONEHEAD);
+                zombieTypes.add(ZombieType.FOOTBALL);
+                zombieTypes.add(ZombieType.GARGANTUAR);
+                break;
+            default:
+                // 默认情况下，只生成普通僵尸
+                zombieTypes.add(ZombieType.NORMAL);
+        }
+        return zombieTypes;
+    }
+    /**
+     * 根据关卡获取僵尸生成速率
+     * @return 僵尸生成的基础间隔时间（毫秒）
+     */
+    private int getZombieSpawnRateByLevel() {
+        switch (level) {
+            case 1:
+                return 5000; // 关卡1：每5秒生成一个僵尸
+            case 2:
+                return 4000; // 关卡2：每4秒生成一个僵尸
+            case 3:
+                return 3000; // 关卡3：每3秒生成一个僵尸，增加难度
+            default:
+                return 5000;
+        }
+    }
+    /**
+     * 生成僵尸方法（替代原有的EventBus事件方式）
+     */
+    private void spawnZombie(ZombieType type, int laneIndex) {
+        // 使用ZombieFactory创建僵尸实体
+        Position position = new Position(1200, laneIndex * 82 - 20);
+        Zombie zombie = ZombieFactory.getInstance().createZombie(type, position, laneIndex);
+        // 添加调试日志，确认正在生成正确类型的僵尸
+        System.out.println("生成僵尸: " + type.name() + " 在关卡 " + level);
+
+        // 在JavaFX应用线程中添加僵尸
+        javafx.application.Platform.runLater(() -> {
+            zombies.add(zombie);
+            renderZombie(zombie, laneIndex);
+        });
+    }
+
+    /**
+     * 启动僵尸生成任务
+     */
+    private void startZombieSpawnTask() {
+        // 获取当前关卡的僵尸类型配置
+        List<ZombieType> availableZombieTypes = getZombieTypesByLevel();
+        // 获取当前关卡的僵尸生成速率
+        int spawnRate = getZombieSpawnRateByLevel();
+
+        // 添加调试日志，确认当前关卡的僵尸配置
+        System.out.println("关卡 " + level + " 配置: 僵尸类型=" + availableZombieTypes + ", 生成速率=" + spawnRate + "ms");
+
+        // 创建并启动僵尸生成线程
+        zombieSpawnThread = new Thread(() -> {
+            try {
+                // 只在首次启动时等待5秒
+                if (isFirstZombieSpawn) {
+                    Thread.sleep(5000);
+                    isFirstZombieSpawn = false; // 设置标志位，表示已经不是首次启动
+                }
+                while (!stopSpawningZombies && !Thread.currentThread().isInterrupted()) {
+                    // 随机选择一个可用的僵尸类型
+                    ZombieType type;
+                    // 随机选择一个车道（0-4）
+                    int laneIndex = random.nextInt(5);
+                    // 如果是第一次生成僵尸且关卡配置中有旗帜僵尸，强制生成旗帜僵尸
+                    if (!flagZombieSpawned && availableZombieTypes.contains(ZombieType.FLAG)) {
+                        type = ZombieType.FLAG;
+                        flagZombieSpawned = true; // 设置标志，表示旗帜僵尸已生成
+                    } else {
+                        // 随机选择一个可用的僵尸类型，但排除旗帜僵尸（如果已经生成过）
+                        List<ZombieType> tempTypes = new ArrayList<>(availableZombieTypes);
+                        if (flagZombieSpawned && tempTypes.contains(ZombieType.FLAG)) {
+                            tempTypes.remove(ZombieType.FLAG); // 移除旗帜僵尸，避免再次生成
+                        }
+                        // 在进度达到50%之前，排除刚特尔和橄榄球僵尸
+                        if (!isHalfwayProgressReached) {
+                            tempTypes.remove(ZombieType.FOOTBALL);
+                            tempTypes.remove(ZombieType.GARGANTUAR);
+                            // 确保临时列表不为空
+                            if (tempTypes.isEmpty()) {
+                                // 如果移除后没有可用僵尸，至少保留普通僵尸
+                                tempTypes.add(ZombieType.NORMAL);
+                            }
+                        }
+                        type = tempTypes.get(random.nextInt(tempTypes.size()));
+                    }
+                    // 生成僵尸
+                    spawnZombie(type, laneIndex);
+
+                    // 根据关卡设置的生成速率等待
+                    Thread.sleep(spawnRate);
+                }
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+            }
+        });
+        zombieSpawnThread.setDaemon(true);
+        zombieSpawnThread.start();
+    }
     /**
      * 更新僵尸位置
      */
     private void updateZombies() {
-        List<UUID> zombiesToRemove = new ArrayList<>();
-        
-        // 获取当前时间（毫秒）
-        long currentTime = System.currentTimeMillis();
-        
-        for (Zombie zombie : zombies) {
-            UUID zombieId = zombie.getId();
-            Pane container = zombieContainers.get(zombieId);
-            
-            // 检查僵尸是否已经死亡
-            if (zombie.isDead()) {
-                zombiesToRemove.add(zombieId);
-                continue;
-            }
-            
-            if (container != null) {
-                // 获取当前位置
-                double currentX = container.getLayoutX();
-                
-                // 根据僵尸类型的移动速度更新位置
-                double speed = getZombieSpeed(zombie.getType());
-                double newX = currentX - speed;
-                // 检查是否有植物阻挡
-                if (hasPlantBlocking(zombie, newX)) {
-                    // 如果有植物阻挡，就不更新位置
-                    newX = currentX;
-                    
-                    // 尝试攻击前方的植物
-                    Plant frontPlant = zombie.checkForPlantsAhead(plants);
-                    if (frontPlant != null && !frontPlant.isDead()) {
-                        zombie.attackPlant(currentTime, frontPlant);
-                    }
-                }
-                // 更新容器位置
-                container.setLayoutX(newX);
+                            List<UUID> zombiesToRemove = new ArrayList<>();
+                            long currentTime = System.currentTimeMillis();
+
+                            for (Zombie zombie : zombies) {
+                                UUID zombieId = zombie.getId();
+                                Pane container = zombieContainers.get(zombieId);
+
+                                if (zombie.isDead()) {
+                                    zombiesToRemove.add(zombieId);
+                                    switchZombieState(zombieId, ZombieState.DEAD); // 切换为死亡状态（需额外实现死亡动画）
+                                    continue;
+                                }
+
+                                if (container != null) {
+                                    double currentX = container.getLayoutX();
+                                    double speed = getZombieSpeed(zombie.getType());
+                                    double newX = currentX - speed;
+
+                                    // ---------------------- 新增：状态控制逻辑 ----------------------
+                                    ZombieState currentState = zombieStates.getOrDefault(zombieId, ZombieState.WALKING);
+                                    boolean hasPlant = hasPlantBlocking(zombie, newX); // 复用原有植物阻挡检测
+
+                                    // 1. 有植物阻挡 → 切换为攻击状态，停止移动
+                                    if (hasPlant) {
+                                        newX = currentX; // 停止移动
+                                        switchZombieState(zombieId, ZombieState.ATTACKING); // 播放攻击动画
+
+                                        // 原有攻击逻辑（不变）
+                                        Plant frontPlant = zombie.checkForPlantsAhead(plants);
+                                        if (frontPlant != null && !frontPlant.isDead()) {
+                                            zombie.attackPlant(currentTime, frontPlant);
+                                        }
+                                    }
+                                    // 2. 无植物阻挡 → 切换为行走状态，恢复移动
+                                    else if (currentState == ZombieState.ATTACKING) {
+                                        switchZombieState(zombieId, ZombieState.WALKING); // 播放走路动画
+                                    }
+                                    // ----------------------------------------------------------------
+
+                                    // 更新容器位置（仅行走状态会移动）
+                                    container.setLayoutX(newX);
+                                    zombie.setPosition(new Position(newX, container.getLayoutY()));
+
+                                    // 原有游戏结束检测逻辑（不变）
+                                    if (newX + container.getPrefWidth() < 82) {
+                                        gameOver = true;
+                                        showGameOverDialog();
+                                        break;
+                                    }
+                                }
+                            }
+//        List<UUID> zombiesToRemove = new ArrayList<>();
+//
+//        // 获取当前时间（毫秒）
+//        long currentTime = System.currentTimeMillis();
+//
+//        for (Zombie zombie : zombies) {
+//            UUID zombieId = zombie.getId();
+//            Pane container = zombieContainers.get(zombieId);
+//
+//            // 检查僵尸是否已经死亡
+//            if (zombie.isDead()) {
+//                zombiesToRemove.add(zombieId);
+//                continue;
+//            }
+//
+//            if (container != null) {
+//                // 获取当前位置
+//                double currentX = container.getLayoutX();
+//
+//                // 根据僵尸类型的移动速度更新位置
+//                double speed = getZombieSpeed(zombie.getType());
+//                double newX = currentX - speed;
+//                // 检查是否有植物阻挡
+//                if (hasPlantBlocking(zombie, newX)) {
+//                    // 如果有植物阻挡，就不更新位置
+//                    newX = currentX;
+//
+//                    // 尝试攻击前方的植物
+//                    Plant frontPlant = zombie.checkForPlantsAhead(plants);
+//                    if (frontPlant != null && !frontPlant.isDead()) {
+//                        zombie.attackPlant(currentTime, frontPlant);
+//                    }
+//                }
+//                // 更新容器位置
+//                container.setLayoutX(newX);
+//
+//
+//                // 更新僵尸实体位置 - 移除Y轴偏移量，确保实体位置与渲染位置一致
+//                zombie.setPosition(new Position(newX, container.getLayoutY()));
+//
+//
+//                // 检查僵尸是否到达终点（游戏失败条件）
+//                if (newX + container.getPrefWidth() < 82) { // 82是游戏网格的偏移量，代表玩家的房子位置
+//                    // 僵尸到达终点，游戏失败
+//                    gameOver = true;
+//                    showGameOverDialog();
+//                    break; // 一旦检测到游戏失败，立即退出循环
+//                }
+//            }
+//        }
+
+        if (!gameOver) {
+            // 处理小推车
+            for (Cart cart : new ArrayList<>(carts)) {
+                if (cart.isTriggered()) {
+                    // 小推车被触发，向右移动
+                    double moveSpeed = 5; // 小推车移动速度
+                    Node cartView = cartViews.get(cart.getLaneIndex());
 
 
-                // 更新僵尸实体位置 - 移除Y轴偏移量，确保实体位置与渲染位置一致
-                zombie.setPosition(new Position(newX, container.getLayoutY()));
+                    if (cartView != null) {
+                        // 更新小推车视图位置
+                        double newX = cartView.getLayoutX() + moveSpeed;
+                        cartView.setLayoutX(newX);
 
+                        // 更新小推车实体位置
+                        cart.updatePosition(moveSpeed);
 
-                // 检查僵尸是否移出屏幕左侧
-                if (newX + container.getPrefWidth() < 0) {
-                    zombiesToRemove.add(zombieId);
-                }
-            }
-        }
-        // 处理小推车
-        for (Cart cart : new ArrayList<>(carts)) {
-            if (cart.isTriggered()) {
-                // 小推车被触发，向右移动
-                double moveSpeed = 5; // 小推车移动速度
-                Region cartView = cartViews.get(cart.getLaneIndex());
+                        // 检查小推车是否清除碰到的僵尸
+                        for (Zombie zombie : new ArrayList<>(zombies)) {
+                            if (zombie.isDead()) continue;
 
-                if (cartView != null) {
-                    // 更新小推车视图位置
-                    double newX = cartView.getLayoutX() + moveSpeed;
-                    cartView.setLayoutX(newX);
+                            if (zombie.getLaneIndex() == cart.getLaneIndex()) {
+                                // 计算僵尸位置
+                                Pane zombieContainer = zombieContainers.get(zombie.getId());
+                                if (zombieContainer != null) {
+                                    double zombieX = zombieContainer.getLayoutX();
 
-                    // 更新小推车实体位置
-                    cart.updatePosition(moveSpeed);
-
-                    // 检查小推车是否清除碰到的僵尸
-                    for (Zombie zombie : new ArrayList<>(zombies)) {
-                        if (zombie.isDead()) continue;
-
-                        if (zombie.getLaneIndex() == cart.getLaneIndex()) {
-                            // 计算僵尸位置
-                            Pane zombieContainer = zombieContainers.get(zombie.getId());
-                            if (zombieContainer != null) {
-                                double zombieX = zombieContainer.getLayoutX();
-
-                                // 检查小推车是否碰到僵尸
-                                if (zombieX <= newX + 60 && zombieX + 50 >= newX) {
-                                    // 清除僵尸
-                                    System.out.println("小推车清除僵尸！车道：" + cart.getLaneIndex());
-                                    removeZombie(zombie.getId());
+                                    // 检查小推车是否碰到僵尸
+                                    if (zombieX <= newX + 60 && zombieX + 50 >= newX) {
+                                        // 清除僵尸
+                                        System.out.println("小推车清除僵尸！车道：" + cart.getLaneIndex());
+                                        removeZombie(zombie.getId());
+                                    }
                                 }
                             }
                         }
-                    }
 
-                    // 检查小推车是否移动到屏幕右侧，移出屏幕则消失
+                        // 检查小推车是否移动到屏幕右侧，移出屏幕则消失
 
-                    if (newX > 984) {
+                        if (newX > 1200) {
 
-                        System.out.println("小推车移出屏幕！");
-                        zombieLayer.getChildren().remove(cartView);
-                        cartViews.remove(cart.getLaneIndex());
-                        cart.setActive(false);
-                        carts.remove(cart);
-                    }
-                }
-            }
-        }
-        // 检查僵尸是否触碰到小推车
-        for (Zombie zombie : zombies) {
-            if (zombie.isDead()) continue;
-
-            int laneIndex = zombie.getLaneIndex();
-            Position zombiePos = zombie.getPosition();
-
-            // 查找对应车道的小推车
-            for (Cart cart : carts) {
-                if (cart.getLaneIndex() == laneIndex && cart.isActive() && !cart.isTriggered()) {
-                    Position cartPos = cart.getPosition();
-
-                    // 检查僵尸是否触碰到小推车
-                    if (zombiePos.x() <= cartPos.x() + 60) { // 小推车宽度为60
-                        // 触发小推车
-                        cart.trigger();
-
-                        // 这里可以添加小推车触发后的逻辑，比如清除当前车道的所有僵尸
-                        // 为了简化，这里只是打印一条消息
-                        System.out.println("小推车被触发！车道：" + laneIndex);
-
-//                        // 从视图中移除小推车
-//                        Region cartView = cartViews.get(laneIndex);
-//                        if (cartView != null) {
-//                            zombieLayer.getChildren().remove(cartView);
-//                            cartViews.remove(laneIndex);
-//                        }
+                            System.out.println("小推车移出屏幕！");
+                            zombieLayer.getChildren().remove(cartView);
+                            cartViews.remove(cart.getLaneIndex());
+                            cart.setActive(false);
+                            carts.remove(cart);
+                        }
                     }
                 }
             }
-        }
-        // 移除需要删除的僵尸
-        for (UUID zombieId : zombiesToRemove) {
-            removeZombie(zombieId);
+            // 检查僵尸是否触碰到小推车
+            for (Zombie zombie : zombies) {
+                if (zombie.isDead()) continue;
+
+                int laneIndex = zombie.getLaneIndex();
+                Position zombiePos = zombie.getPosition();
+
+                // 查找对应车道的小推车
+                for (Cart cart : carts) {
+                    if (cart.getLaneIndex() == laneIndex && cart.isActive() && !cart.isTriggered()) {
+                        Position cartPos = cart.getPosition();
+
+                        // 检查僵尸是否触碰到小推车
+                        if (zombiePos.x() <= cartPos.x() + 60) { // 小推车宽度为60
+                            // 触发小推车
+                            cart.trigger();
+
+                            // 这里可以添加小推车触发后的逻辑，比如清除当前车道的所有僵尸
+                            // 为了简化，这里只是打印一条消息
+                            System.out.println("小推车被触发！车道：" + laneIndex);
+
+                        }
+                    }
+                }
+            }
+            // 移除需要删除的僵尸
+            for (UUID zombieId : zombiesToRemove) {
+                removeZombie(zombieId);
+            }
         }
     }
     /**
@@ -931,15 +1822,15 @@ public class BattleScene extends Scene {
         // 根据僵尸类型设置不同的移动速度
         switch (type) {
             case NORMAL:
-                return 0.1;
+                return 0.15;
             case FLAG:
-                return 0.13;
+                return 0.16;
             case BUCKETHEAD:
                 return 0.1;
             case FOOTBALL:
-                return 0.2;
+                return 0.22;
             default:
-                return 0.1;
+                return 0.15;
         }
     }
     
@@ -947,25 +1838,41 @@ public class BattleScene extends Scene {
      * 移除僵尸
      */
     private void removeZombie(UUID zombieId) {
-        // 从僵尸层中移除僵尸容器
-        Pane container = zombieContainers.get(zombieId);
-        if (container != null && zombieLayer != null && zombieLayer.getChildren().contains(container)) {
-            zombieLayer.getChildren().remove(container);
-        }
+                            // 1. 停止动画时间线
+                            Timeline timeline = zombieAnimationTimelines.get(zombieId);
+                            if (timeline != null) {
+                                timeline.stop();
+                                zombieAnimationTimelines.remove(zombieId);
+                            }
 
-        // 从映射中移除
-        zombieViews.remove(zombieId);
-        zombieContainers.remove(zombieId);
-        zombies.removeIf(z -> z.getId().equals(zombieId));
+                            // 2. 清理状态与视图（原有逻辑）
+                            Pane container = zombieContainers.get(zombieId);
+                            if (container != null && zombieLayer != null && zombieLayer.getChildren().contains(container)) {
+                                zombieLayer.getChildren().remove(container);
+                            }
+                            zombieViews.remove(zombieId);
+                            zombieContainers.remove(zombieId);
+                            zombieStates.remove(zombieId); // 移除状态记录
+                            zombies.removeIf(z -> z.getId().equals(zombieId));
+//        // 从僵尸层中移除僵尸容器
+//        Pane container = zombieContainers.get(zombieId);
+//        if (container != null && zombieLayer != null && zombieLayer.getChildren().contains(container)) {
+//            zombieLayer.getChildren().remove(container);
+//        }
+//
+//        // 从映射中移除
+//        zombieViews.remove(zombieId);
+//        zombieContainers.remove(zombieId);
+//        zombies.removeIf(z -> z.getId().equals(zombieId));
     }
 
     // 添加新方法：更新植物状态和处理攻击
     private void updatePlants(long now) {
         //System.out.println("updatePlants called with time: " + now + " ms");
-        
+
         // 创建一个列表来存储需要移除的植物
         List<Plant> plantsToRemove = new ArrayList<>();
-        
+
         // 遍历所有植物
         for (Plant plant : plants) {
             // 添加植物位置日志
@@ -979,10 +1886,10 @@ public class BattleScene extends Scene {
             }
 
             // 处理向日葵生产阳光
-            if (plant.produceSun(now)) {
+            if (!isPaused && plant.produceSun(now)) {
                 System.out.println("向日葵生产阳光！位置: " + plant.getPosition().x() + ", " + plant.getPosition().y());
                 // 向日葵生产了阳光，在植物位置上方生成阳光
-                spawnSunAtPosition(plant.getPosition().x(), plant.getPosition().y() - 20);
+                spawnSunAtPosition(plant.getPosition().x()+150, plant.getPosition().y());
             }
 
             // 检查植物是否死亡
@@ -990,34 +1897,39 @@ public class BattleScene extends Scene {
                 plantsToRemove.add(plant);
                 continue; // 跳过已死亡植物的其他处理
             }
-            
+
             // 处理植物攻击
             List<Projectile> newProjectiles = plant.attack(now, zombies);
             if (!newProjectiles.isEmpty()) {
                 System.out.println("生成了" + newProjectiles.size() + "颗子弹");
                 projectiles.addAll(newProjectiles);
+                // 渲染新子弹
+                for (Projectile projectile : newProjectiles) {
+                    System.out.println("准备渲染子弹: 类型=" + projectile.getType() + ", 位置=(" + projectile.getPosition().x() + ", " + projectile.getPosition().y() + ")");
+                    renderProjectile(projectile);
+                }
             }
             else {
                 System.out.println("没有生成子弹");
             }
         }
-        
+
         // 移除死亡的植物
         for (Plant deadPlant : plantsToRemove) {
             plants.remove(deadPlant);
-            
+
             // 清理植物视图
-            // 从植物位置计算出对应的格子行和列
-            int col = (int)((deadPlant.getPosition().x() - 5) / (80 + 2));
-            int row = (int)((deadPlant.getPosition().y() - 5) / (80 + 2));
-            
+            // 从植物位置计算出对应的格子行和列（与placePlant方法保持一致的计算逻辑）
+            int col = (int)(deadPlant.getPosition().x() / (80 + 2));
+            int row = (int)(deadPlant.getPosition().y() / (80 + 2));
+
             // 获取对应的单元格并清除植物视图
             String cellKey = row + "," + col;
             Pane cell = plantCells.get(cellKey);
             if (cell != null) {
                 cell.getChildren().clear(); // 清除单元格中的所有子节点（即植物视图）
             }
-            
+
             System.out.println("移除死亡植物: " + deadPlant.getType().name() + ", 位置: (" + deadPlant.getPosition().x() + ", " + deadPlant.getPosition().y() + "), 格子: (" + row + ", " + col + ")");
         }
     }
@@ -1026,50 +1938,118 @@ public class BattleScene extends Scene {
     private void spawnSunAtPosition(double x, double y) {
         int sunValue = 25; // 阳光价值
         Position position = new Position(x, y);
-
         // 创建阳光实体
         Sun sun = new Sun(position, sunValue);
         activeSuns.add(sun);
+        final ImageView sunVisual;
 
-        // 创建阳光的可视化表示
-        Circle sunVisual = new Circle(position.x(), position.y(), 15);
-        sunVisual.setFill(Color.YELLOW);
-        sunVisual.setStroke(Color.GOLD);
-        sunVisual.setStrokeWidth(2);
+        try {
+            Image sunImage = new Image(Objects.requireNonNull(
+                    getClass().getResourceAsStream("/pic/sun.png"),
+                    "阳光图片不存在: /pic/sun.png"
+            ));
 
-        // 添加点击事件
-        sunVisual.setOnMouseClicked(e -> {
-            if (!sun.isCollected()) {
-                collectSun(sun, sunVisual);
+            // 2. 只初始化一次，之后不再修改（有效final）
+            sunVisual = new ImageView(sunImage);
+            sunVisual.setFitWidth(60);
+            sunVisual.setFitHeight(60);
+            sunVisual.setPreserveRatio(true);
+            sunVisual.setX(x - sunVisual.getFitWidth() / 2);
+            sunVisual.setY(y - sunVisual.getFitHeight() / 2);
+
+            // 3. lambda中使用final变量是安全的
+            sunVisual.setOnMouseClicked(e -> {
+                if (!sun.isCollected()) {
+                    // 这里引用sunVisual是安全的，因为它是final
+                    collectSun(sun, sunVisual, sunTargetPositions);
+                }
+            });
+
+            if (sunLayer != null) {
+                sunLayer.getChildren().add(sunVisual);
             }
-        });
 
-        // 添加到阳光层
-        sunLayer.getChildren().add(sunVisual);
+            battleStatusText.setText("阳光出现了！");
 
-        battleStatusText.setText("阳光出现了！");
+            // 阳光自动消失的定时器 - 修改为考虑暂停状态
+            Thread sunThread = new Thread(() -> {
+                try {
+                    long startTime = System.currentTimeMillis();
+                    long elapsedTime = 0;
+                    // 总持续时间10秒
+                    long totalDuration = 10000;
 
-        // 阳光自动消失的定时器
-        new Thread(() -> {
-            try {
-                Thread.sleep(10000); // 10秒后自动消失
-                javafx.application.Platform.runLater(() -> {
-                    if (!sun.isCollected()) {
-                        sunLayer.getChildren().remove(sunVisual);
-                        activeSuns.remove(sun);
+                    // 循环检查，直到达到总持续时间或阳光被收集或线程中断
+                    while (elapsedTime < totalDuration && !sun.isCollected() && !Thread.currentThread().isInterrupted()) {
+                        if (!isPaused) {
+                            // 游戏未暂停时才增加已过时间
+                            elapsedTime = System.currentTimeMillis() - startTime;
+                        }
+                        // 短暂睡眠，避免CPU占用过高
+                        Thread.sleep(100);
                     }
-                });
-            } catch (InterruptedException e) {
-                Thread.currentThread().interrupt();
-            }
-        }).start();
+
+                    if (!Thread.currentThread().isInterrupted() && !sun.isCollected()) {
+                        javafx.application.Platform.runLater(() -> {
+                            if (!sun.isCollected()) {
+                                sunLayer.getChildren().remove(sunVisual);
+                                activeSuns.remove(sun);
+                            }
+                        });
+                    }
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                }
+            });
+            sunThread.start();
+
+        } catch (Exception e) {
+            System.err.println("阳光图片加载失败: " + e.getMessage());
+            activeSuns.remove(sun);
+            // 5. 异常时必须给final变量赋值（或提前初始化）
+//            sunVisual = null;
+        }
     }
+//        // 创建阳光的可视化表示
+//        Circle sunVisual = new Circle(position.x(), position.y(), 15);
+//        sunVisual.setFill(Color.YELLOW);
+//        sunVisual.setStroke(Color.GOLD);
+//        sunVisual.setStrokeWidth(2);
+//
+//        // 添加点击事件
+//        sunVisual.setOnMouseClicked(e -> {
+//            if (!sun.isCollected()) {
+//                collectSun(sun, sunVisual, sunTargetPositions);
+//            }
+//        });
+//
+//        // 添加到阳光层
+//        sunLayer.getChildren().add(sunVisual);
+//
+//        battleStatusText.setText("阳光出现了！");
+//
+//        // 阳光自动消失的定时器
+//        new Thread(() -> {
+//            try {
+//                Thread.sleep(10000); // 10秒后自动消失
+//                Platform.runLater(() -> {
+//                    if (!sun.isCollected()) {
+//                        sunLayer.getChildren().remove(sunVisual);
+//                        activeSuns.remove(sun);
+//                    }
+//                });
+//            } catch (InterruptedException e) {
+//                Thread.currentThread().interrupt();
+//            }
+//        }).start();
 
     // 添加新方法：渲染子弹
     private void renderProjectile(Projectile projectile) {
         // 创建子弹视图
         Pane projectileView = new Pane();
-        projectileView.setPrefSize(15, 15);
+
+        projectileView.setPrefSize(20, 20);
+
         projectileView.setStyle(getProjectileStyleByType(projectile.getType()));
 
 
@@ -1094,12 +2074,11 @@ public class BattleScene extends Scene {
         // 添加到子弹层
         projectileLayer.getChildren().add(projectileView);
     }
-
     // 添加新方法：根据子弹类型获取样式
     private String getProjectileStyleByType(ProjectileType type) {
         switch (type) {
             case PEANUT:
-                return "-fx-background-color: #00FFFF; -fx-border-color: #008080; -fx-border-width: 1;";
+                return "-fx-background-color: #663399; -fx-background-radius: 50%;";
             case FIRE_PEANUT:
                 return "-fx-background-color: #FF6347; -fx-border-color: #8B0000; -fx-border-width: 1;";
             case ICE_PEANUT:
@@ -1117,7 +2096,6 @@ public class BattleScene extends Scene {
 
         for (Projectile projectile : projectiles) {
             Pane view = projectileViews.get(projectile);
-
             if (view != null) {
                 // 使用Projectile类的updatePosition方法更新子弹位置
                 projectile.updatePosition(16); // 假设每帧16ms
@@ -1163,11 +2141,9 @@ public class BattleScene extends Scene {
             Position zombiePos = zombie.getPosition();
             Position projectilePos = projectile.getPosition();
 
-            // 计算距离进行碰撞检测（使用圆形碰撞检测，半径为15，与子弹大小匹配）
+            // 计算距离进行碰撞检测，忽略Y轴差异，只检查X轴距离
             double dx = projectilePos.x() - zombiePos.x();
-            double dy = projectilePos.y() - zombiePos.y();
-            double distance = Math.sqrt(dx * dx + dy * dy);
-            boolean collision = (distance <= 20); // 稍大于子弹半径，留出一点误差余量
+            boolean collision = Math.abs(dx) <= 20; // 只检查X轴距离，忽略Y轴差异
 
             if (collision) {
 
@@ -1203,22 +2179,60 @@ public class BattleScene extends Scene {
     private void renderCart(Cart cart) {
         int laneIndex = cart.getLaneIndex();
         Position position = cart.getPosition();
+        ImageView cartView = new ImageView();
+        try {
+            // 加载小推车图片（替换为你的图片路径）
+            Image cartImage = new Image(
+                    Objects.requireNonNull(
+                            getClass().getResourceAsStream("/pic/cart.png")));
 
-        // 创建小推车视图（这里使用简单的矩形代表）
-        Region cartView = new Region();
-        cartView.setPrefSize(60, 40);
-        cartView.setStyle("-fx-background-color: #8B4513; -fx-border-color: #000000; -fx-border-width: 2;");
+            cartView.setImage(cartImage);
+            // 设置图片大小（保持原矩形的60x40尺寸）
+            cartView.setFitWidth(90);
+            cartView.setFitHeight(60);
+            cartView.setPreserveRatio(true); // 保持图片比例
 
-        // 设置小推车的位置
+            // 可选：图片加载前的占位样式（类似原矩形）
+            cartView.setStyle("-fx-background-color: #8B4513;");
+
+        } catch (Exception e) {
+            // 图片加载失败时使用原矩形作为备用
+            System.err.println("小推车图片加载失败，使用备用矩形: " + e.getMessage());
+            Region fallbackCart = new Region();
+            fallbackCart.setPrefSize(60, 40);
+            fallbackCart.setStyle("-fx-background-color: #8B4513; -fx-border-color: #000000; -fx-border-width: 2;");
+
+            // 将备用矩形添加到图层并保存引用
+            zombieLayer.getChildren().add(fallbackCart);
+            cartViews.put(laneIndex, fallbackCart);
+            return; // 终止当前方法，避免后续错误
+        }
+
+        // 设置小推车的位置（与原逻辑一致）
         cartView.setLayoutX(position.x());
         cartView.setLayoutY(position.y());
 
-        // 添加到僵尸层（因为小推车应该在植物层之上）
+        // 添加到僵尸层（保持原有层级）
         zombieLayer.getChildren().add(cartView);
 
-        // 保存小推车视图引用
+        // 保存小推车视图引用（ImageView是Node的子类，可直接放入原集合）
         cartViews.put(laneIndex, cartView);
     }
+//        // 创建小推车视图（这里使用简单的矩形代表）
+//        Region cartView = new Region();
+//        cartView.setPrefSize(60, 40);
+//        cartView.setStyle("-fx-background-color: #8B4513; -fx-border-color: #000000; -fx-border-width: 2;");
+//
+//        // 设置小推车的位置
+//        cartView.setLayoutX(position.x());
+//        cartView.setLayoutY(position.y());
+//
+//        // 添加到僵尸层（因为小推车应该在植物层之上）
+//        zombieLayer.getChildren().add(cartView);
+//
+//        // 保存小推车视图引用
+//        cartViews.put(laneIndex, cartView);
+
     /**
      * 铲除植物
      */
@@ -1254,14 +2268,459 @@ public class BattleScene extends Scene {
                 // 返回部分阳光（例如返还一半的阳光成本）
                 int refund = plantToRemove.getType().getCost() / 2;
                 sunBankService.addSun(refund);
-                sunAmountText.setText("阳光: " + sunBankService.getSunAmount());
+                sunAmountText.setText("       " + sunBankService.getSunAmount());
                 // 铲除成功后自动退出铲子模式
                 isShovelMode = false;
-                shovelButton.setStyle("-fx-background-color: #6c757d; -fx-text-fill: white;");
+                shovelButton.setStyle("-fx-background-color: transparent; -fx-text-fill: white;");
+
             }
         } else {
             battleStatusText.setText("该位置没有植物！");
         }
+
+    }
+    /**
+     * 显示游戏结束对话框
+     */
+    private void showGameOverDialog() {
+        // 停止游戏
+        stopBattle();
+
+        // 创建一个半透明的遮罩层
+        Pane overlay = new Pane();
+        overlay.setPrefSize(1200, 700);
+        overlay.setStyle("-fx-background-color: rgba(0, 0, 0, 0.7);");
+        overlay.setMouseTransparent(false);
+
+        // 创建游戏结束对话框
+        VBox gameOverBox = new VBox(20);
+        gameOverBox.setAlignment(Pos.CENTER);
+        gameOverBox.setPrefSize(400, 300);
+        gameOverBox.setStyle("-fx-background-color: #283618; -fx-border-color: #bc6c25; -fx-border-width: 3; -fx-padding: 20;");
+        gameOverBox.setLayoutX((1200 - 400) / 2);
+        gameOverBox.setLayoutY((700 - 300) / 2);
+
+        // 游戏结束文本
+        Text gameOverText = new Text("游戏失败！");
+        gameOverText.setFont(Font.font("Arial", FontWeight.BOLD, 32));
+        gameOverText.setFill(Color.RED);
+
+        // 创建按钮容器
+        HBox buttonBox = new HBox(20);
+        buttonBox.setAlignment(Pos.CENTER);
+
+        // 返回选关按钮
+        Button backToLevelSelectButton = new Button("返回选关");
+        backToLevelSelectButton.setPrefSize(120, 40);
+        backToLevelSelectButton.setFont(Font.font("Arial", FontWeight.NORMAL, 16));
+        backToLevelSelectButton.setOnAction(e -> {
+            // 移除遮罩层和对话框
+            ((Pane) getRoot()).getChildren().remove(overlay);
+            // 跳转到选关界面
+            Router.getInstance().showLevelSelectScene();
+        });
+
+        // 重新游戏按钮
+        Button restartButton = new Button("重新游戏");
+        restartButton.setPrefSize(120, 40);
+        restartButton.setFont(Font.font("Arial", FontWeight.NORMAL, 16));
+        restartButton.setOnAction(e -> {
+            // 移除遮罩层和对话框
+            ((Pane) getRoot()).getChildren().remove(overlay);
+            // 重新开始当前关卡
+            restartLevel();
+        });
+
+        buttonBox.getChildren().addAll(backToLevelSelectButton, restartButton);
+        gameOverBox.getChildren().addAll(gameOverText, buttonBox);
+        overlay.getChildren().add(gameOverBox);
+
+        // 将遮罩层添加到场景根节点
+        ((Pane) getRoot()).getChildren().add(overlay);
+    }
+
+    /**
+     * 重新开始当前关卡
+     */
+    private void restartLevel() {
+        // 清空游戏中的所有实体
+        plants.clear();
+        zombies.clear();
+        projectiles.clear();
+        activeSuns.clear();
+
+        isFirstZombieSpawn = true; // 重置首次启动标志
+        flagZombieSpawned = false; // 重置旗帜僵尸标志
+
+        // 重置游戏状态
+        battleStarted = false;
+        isPaused = false; // 重置暂停标志
+        gameOver = false;
+        selectedPlantType = null;
+        isShovelMode = false;
+        stopSpawningZombies = false;
+        halfwayZombieWaveTriggered = false; // 重置50%进度僵尸潮标志
+        finalZombieWaveTriggered = false; // 重置100%进度僵尸潮标志
+        isHalfwayProgressReached = false; // 重置50%进度标志位
+        // 确保GameLoopService也重置停止生成僵尸的状态
+        if (gameLoopService instanceof GameLoopServiceImpl) {
+            ((GameLoopServiceImpl) gameLoopService).setStopSpawningZombies(false);
+        }
+        // 重置UI状态
+        battleStatusText.setText("战斗准备中...");
+        startButton.setDisable(false);
+        startButton.setText("开始战斗");
+        shovelButton.setStyle("-fx-background-color: #6c757d; -fx-text-fill: white;");
+        progressBar.setProgress(0); // 重置进度条
+
+        // 清空植物网格
+        for (Pane cell : plantCells.values()) {
+            cell.getChildren().clear();
+        }
+
+        // 清空阳光、僵尸和子弹层
+        sunLayer.getChildren().clear();
+        zombieLayer.getChildren().clear();
+        projectileLayer.getChildren().clear();
+
+        // 清空映射
+        zombieViews.clear();
+        zombieContainers.clear();
+        projectileViews.clear();
+
+        // 重置阳光数量
+        sunBankService.setSunAmount(50); // 设置初始阳光数量
+        sunAmountText.setText("       " + sunBankService.getSunAmount());
+
+        // 重新创建小推车
+        carts.clear();
+        cartViews.clear();
+        for (int laneIndex = 0; laneIndex < 5; laneIndex++) {
+            Position cartPosition = new Position(10, laneIndex * 82 + 5 + 40);
+            Cart cart = CartFactory.getInstance().createDefaultCart(cartPosition, laneIndex);
+            carts.add(cart);
+            renderCart(cart);
+        }
+    }
+    /**
+     * 更新游戏进度
+     */
+    private void updateBattleProgress() {
+        if (!battleStarted || gameOver) {
+            return;
+        }
+
+        long currentTime = System.currentTimeMillis();
+        long elapsedTime = currentTime - battleStartTime;
+        long battleDuration = getBattleDurationByLevel();
+
+        // 计算进度（0-1）
+        battleProgress = Math.min((double) elapsedTime / battleDuration, 1.0);
+        progressBar.setProgress(battleProgress);
+
+        // 设置进度50%标志位
+        if (battleProgress >= 0.5 && !isHalfwayProgressReached) {
+            isHalfwayProgressReached = true;
+        }
+        // 当进度达到50%且尚未触发僵尸潮时，触发第一波僵尸潮
+        if (battleProgress >= 0.5 && !halfwayZombieWaveTriggered) {
+            halfwayZombieWaveTriggered = true;
+            triggerZombieWave("中期僵尸潮来袭！");
+        }
+        // 当进度达到100%时，停止生成僵尸
+        if (battleProgress >= 1.0 && !stopSpawningZombies) {
+            // 触发最终僵尸潮
+            if (!finalZombieWaveTriggered) {
+                finalZombieWaveTriggered = true;
+                triggerZombieWave("最终僵尸潮来袭！消灭所有僵尸获胜！");
+            }
+
+            // 不立即停止生成僵尸，让僵尸潮完成
+            if (stopSpawningZombies) {
+                battleStatusText.setText("僵尸生成已停止！消灭所有剩余僵尸获胜！");
+            }
+        }
+    }
+
+    /**
+     * 检查游戏胜利条件
+     */
+    private void checkGameVictory() {
+        // 条件1：进度条已满（不再生成僵尸）
+        // 条件2：所有僵尸已被消灭
+        if (stopSpawningZombies && zombies.isEmpty()) {
+            gameOver = true;
+            showGameVictoryDialog();
+        }
+    }
+    /**
+     * 显示游戏胜利对话框
+     */
+    private void showGameVictoryDialog() {
+        // 停止游戏
+        stopBattle();
+
+        // 创建一个半透明的遮罩层
+        Pane overlay = new Pane();
+        overlay.setPrefSize(1200, 700);
+        overlay.setStyle("-fx-background-color: rgba(0, 0, 0, 0.7);");
+        overlay.setMouseTransparent(false);
+
+        // 创建游戏胜利对话框
+        VBox gameVictoryBox = new VBox(20);
+        gameVictoryBox.setAlignment(Pos.CENTER);
+        gameVictoryBox.setPrefSize(400, 300);
+        gameVictoryBox.setStyle("-fx-background-color: #283618; -fx-border-color: #bc6c25; -fx-border-width: 3; -fx-padding: 20;");
+        gameVictoryBox.setLayoutX((1200 - 400) / 2);
+        gameVictoryBox.setLayoutY((700 - 300) / 2);
+
+        // 游戏胜利文本
+        Text gameVictoryText = new Text("游戏胜利！");
+        gameVictoryText.setFont(Font.font("Arial", FontWeight.BOLD, 32));
+        gameVictoryText.setFill(Color.GREEN);
+
+        // 创建按钮容器
+        HBox buttonBox = new HBox(20);
+        buttonBox.setAlignment(Pos.CENTER);
+
+        // 返回选关按钮
+        Button backToLevelSelectButton = new Button("返回选关");
+        backToLevelSelectButton.setPrefSize(120, 40);
+        backToLevelSelectButton.setFont(Font.font("Arial", FontWeight.NORMAL, 16));
+        backToLevelSelectButton.setOnAction(e -> {
+            // 移除遮罩层和对话框
+            ((Pane) getRoot()).getChildren().remove(overlay);
+            // 跳转到选关界面
+            Router.getInstance().showLevelSelectScene();
+        });
+        buttonBox.getChildren().add(backToLevelSelectButton);
+        // 开始下一关按钮 - 修改自"重新游戏"按钮
+        if (level < 3) {
+            // 开始下一关按钮
+            Button nextLevelButton = new Button("开始下一关");
+            nextLevelButton.setPrefSize(120, 40);
+            nextLevelButton.setFont(Font.font("Arial", FontWeight.NORMAL, 16));
+            nextLevelButton.setOnAction(e -> {
+                // 移除遮罩层和对话框
+                ((Pane) getRoot()).getChildren().remove(overlay);
+                // 跳转到下一个关卡
+                Router.getInstance().showBattleScene(level + 1);
+            });
+            buttonBox.getChildren().add(nextLevelButton);
+        }
+        gameVictoryBox.getChildren().addAll(gameVictoryText, buttonBox);
+        overlay.getChildren().add(gameVictoryBox);
+
+        // 将遮罩层添加到场景根节点
+        ((Pane) getRoot()).getChildren().add(overlay);
+    }
+    /**
+     * 暂停游戏
+     */
+    private void pauseBattle() {
+        if (battleStarted && !gameOver && !isPaused) {
+            isPaused = true;
+            // 中断阳光生成线程
+            if (sunGenerationThread != null && sunGenerationThread.isAlive()) {
+                sunGenerationThread.interrupt();
+                sunGenerationThread = null;
+            }
+            // 中断僵尸生成线程（新增）
+            if (zombieSpawnThread != null && zombieSpawnThread.isAlive()) {
+                zombieSpawnThread.interrupt();
+                zombieSpawnThread = null;
+            }
+            // 暂停游戏循环
+            gameLoopService.stop();
+            // 显示暂停对话框
+            showPauseDialog();
+        }
+    }
+
+    /**
+     * 恢复游戏
+     */
+    private void resumeBattle() {
+        if (isPaused) {
+            isPaused = false;
+            // 重新启动游戏循环
+            ((GameLoopServiceImpl) gameLoopService).setSpawnService(spawnService);
+            gameLoopService.start();
+            // 重新启动阳光生成线程
+            sunGenerationThread = new Thread(this::sunGenerationTask);
+            sunGenerationThread.setDaemon(true);
+            sunGenerationThread.start();
+            // 重新启动僵尸生成线程（新增）
+            startZombieSpawnTask();
+            // 隐藏暂停对话框
+            Pane root = (Pane) getRoot();
+            for (javafx.scene.Node node : root.getChildren()) {
+                if (node.getId() != null && node.getId().equals("pause-overlay")) {
+                    root.getChildren().remove(node);
+                    break;
+                }
+            }
+        }
+    }
+
+    /**
+     * 显示暂停对话框
+     */
+    private void showPauseDialog() {
+
+        // 创建一个半透明的遮罩层
+        Pane overlay = new Pane();
+        overlay.setPrefSize(1200, 700);
+        overlay.setStyle("-fx-background-color: rgba(0, 0, 0, 0.7);");
+        overlay.setMouseTransparent(false);
+
+        // 创建暂停对话框
+        VBox pauseBox = new VBox(20);
+        pauseBox.setAlignment(Pos.CENTER);
+        pauseBox.setPrefSize(400, 300);
+        pauseBox.setStyle("-fx-background-color: #283618; -fx-border-color: #bc6c25; -fx-border-width: 3; -fx-padding: 20;");
+        pauseBox.setLayoutX((1200 - 400) / 2);
+        pauseBox.setLayoutY((700 - 300) / 2);
+
+        // 暂停文本
+        Text pauseText = new Text("游戏已暂停");
+        pauseText.setFont(Font.font("Arial", FontWeight.BOLD, 32));
+        pauseText.setFill(Color.YELLOW);
+
+        // 创建按钮容器
+        VBox buttonBox = new VBox(20);
+        buttonBox.setAlignment(Pos.CENTER);
+
+        // 继续游戏按钮
+        Button resumeButton = new Button("继续游戏");
+        resumeButton.setPrefSize(180, 40);
+        resumeButton.setFont(Font.font("Arial", FontWeight.NORMAL, 16));
+        resumeButton.setOnAction(e -> {
+            // 移除遮罩层和对话框
+            ((Pane) getRoot()).getChildren().remove(overlay);
+            // 恢复游戏
+            resumeBattle();
+        });
+
+        // 重新游戏按钮
+        Button restartButton = new Button("重新游戏");
+        restartButton.setPrefSize(180, 40);
+        restartButton.setFont(Font.font("Arial", FontWeight.NORMAL, 16));
+        restartButton.setOnAction(e -> {
+            // 移除遮罩层和对话框
+            ((Pane) getRoot()).getChildren().remove(overlay);
+            // 重新开始当前关卡
+            restartLevel();
+        });
+
+        // 返回选关按钮
+        Button backToLevelSelectButton = new Button("返回选关");
+        backToLevelSelectButton.setPrefSize(180, 40);
+        backToLevelSelectButton.setFont(Font.font("Arial", FontWeight.NORMAL, 16));
+        backToLevelSelectButton.setOnAction(e -> {
+            // 移除遮罩层和对话框
+            ((Pane) getRoot()).getChildren().remove(overlay);
+            // 跳转到选关界面
+            stopBattle();
+            Router.getInstance().showLevelSelectScene();
+        });
+
+        buttonBox.getChildren().addAll(resumeButton, restartButton, backToLevelSelectButton);
+        pauseBox.getChildren().addAll(pauseText, buttonBox);
+        overlay.getChildren().add(pauseBox);
+
+        // 将遮罩层添加到场景根节点
+        ((Pane) getRoot()).getChildren().add(overlay);
+    }
+    /**
+     * 触发僵尸潮
+     * @param message 显示给玩家的消息
+     */
+    private void triggerZombieWave(String message) {
+        // 更新战斗状态文本
+        battleStatusText.setText(message);
+        System.out.println(message);
+
+        // 创建并启动僵尸潮线程
+        Thread zombieWaveThread = new Thread(() -> {
+            try {
+                // 获取当前关卡的僵尸类型配置
+                List<ZombieType> availableZombieTypes = getZombieTypesByLevel();
+
+                // 根据关卡决定生成的僵尸数量
+                int waveSize;
+                switch (level) {
+                    case 1:
+                        waveSize = 10; // 关卡1：生成5个僵尸
+                        break;
+                    case 2:
+                        waveSize = 15; // 关卡2：生成8个僵尸
+                        break;
+                    case 3:
+                        waveSize = 20; // 关卡3：生成12个僵尸
+                        break;
+                    default:
+                        waveSize = 5;
+                }
+
+                // 快速连续生成僵尸
+                for (int i = 0; i < waveSize; i++) {
+                    // 随机选择一个可用的僵尸类型，但排除旗帜僵尸（如果已经生成过）
+                    List<ZombieType> tempTypes = new ArrayList<>(availableZombieTypes);
+                    if (flagZombieSpawned && tempTypes.contains(ZombieType.FLAG)) {
+                        tempTypes.remove(ZombieType.FLAG); // 移除旗帜僵尸，避免再次生成
+                    }
+                    // 在进度达到50%之前，排除刚特尔和橄榄球僵尸
+                    if (!isHalfwayProgressReached) {
+                        tempTypes.remove(ZombieType.FOOTBALL);
+                        tempTypes.remove(ZombieType.GARGANTUAR);
+                        // 确保临时列表不为空
+                        if (tempTypes.isEmpty()) {
+                            // 如果移除后没有可用僵尸，至少保留普通僵尸
+                            tempTypes.add(ZombieType.NORMAL);
+                        }
+                    }
+                    // 对于最终僵尸潮，可以增加更强的僵尸出现概率
+                    ZombieType type;
+                    if (finalZombieWaveTriggered && random.nextBoolean()) {
+                        // 优先选择强力僵尸类型
+                        List<ZombieType> strongTypes = new ArrayList<>();
+                        for (ZombieType t : tempTypes) {
+                            if (t != ZombieType.NORMAL && t != ZombieType.FLAG) {
+                                strongTypes.add(t);
+                            }
+                        }
+                        if (!strongTypes.isEmpty()) {
+                            type = strongTypes.get(random.nextInt(strongTypes.size()));
+                        } else {
+                            type = tempTypes.get(random.nextInt(tempTypes.size()));
+                        }
+                    } else {
+                        type = tempTypes.get(random.nextInt(tempTypes.size()));
+                    }
+
+                    // 随机选择一个车道
+                    int laneIndex = random.nextInt(5);
+                    // 生成僵尸
+                    spawnZombie(type, laneIndex);
+                    // 间隔200-500毫秒生成下一个僵尸，营造连续进攻的感觉
+                    Thread.sleep(200 + random.nextInt(300));
+                }
+
+                // 最终僵尸潮结束后停止生成僵尸
+                if (finalZombieWaveTriggered) {
+                    stopSpawningZombies = true;
+                    if (gameLoopService instanceof GameLoopServiceImpl) {
+                        ((GameLoopServiceImpl) gameLoopService).setStopSpawningZombies(true);
+                    }
+                }
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+            }
+        });
+
+        zombieWaveThread.setDaemon(true);
+        zombieWaveThread.start();
     }
 
 }

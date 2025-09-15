@@ -138,7 +138,7 @@ public class Zombie implements GameObject {
         
         // 使用getActualSpeed()而不是getSpeed()，考虑状态加成
         double distanceToMove = (getActualSpeed() * deltaTime) / 1000.0;
-        
+
         // 僵尸向左移动（X坐标减小）
         Position newPosition = new Position(position.x() - distanceToMove, position.y());
         setPosition(newPosition);
@@ -175,10 +175,10 @@ public class Zombie implements GameObject {
         
         // 直接对植物造成伤害，不进行范围检查（简化逻辑）
         plant.takeDamage(type.getDamage());
-        
+
         // 调试输出，验证伤害是否正确施加
         System.out.println("僵尸攻击植物: " + type.name() + " 造成 " + type.getDamage() + " 点伤害，植物剩余血量: " + plant.getHealth().current());
-        
+
         lastAttackTime = currentTime;
         
         // 如果植物死亡，停止攻击
@@ -195,18 +195,23 @@ public class Zombie implements GameObject {
      */
     public void takeDamage(int damage) {
         boolean armorHit = hasArmor && armorHealth > 0;
-        
+        int remainingDamage = damage;
         // 如果有护甲，先减少护甲生命值
         if (armorHit) {
-            armorHealth -= damage;
+            // 计算护甲能吸收的伤害
+            int armorAbsorb = Math.min(armorHealth, damage);
+            armorHealth -= armorAbsorb;
+            remainingDamage = damage - armorAbsorb;
+
             if (armorHealth <= 0) {
                 hasArmor = false;
                 // 护甲被破坏时可能有特殊效果
                 onArmorDestroyed();
             }
-        } else {
-            // 没有护甲，直接减少生命值
-            this.health = this.health.takeDamage(damage);
+        }
+        // 将剩余伤害应用到基础生命值
+        if (remainingDamage > 0) {
+            this.health = this.health.takeDamage(remainingDamage);
         }
         
         // 发布僵尸受到伤害事件
