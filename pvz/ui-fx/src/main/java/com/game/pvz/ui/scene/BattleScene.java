@@ -996,7 +996,9 @@ private void initZombieImageConfig(){
 
                             // 1. 计算初始位置（从右侧进入，与原有逻辑一致）
                             double x = 1200;
+
                             double y = laneIndex * 82 - 20;
+
 
                             // 2. 创建僵尸容器（承载动画视图）
                             Pane zombieContainer = new Pane();
@@ -1514,7 +1516,9 @@ private void initZombieImageConfig(){
      */
     private void spawnZombie(ZombieType type, int laneIndex) {
         // 使用ZombieFactory创建僵尸实体
+
         Position position = new Position(1200, laneIndex * 82 - 20);
+
         Zombie zombie = ZombieFactory.getInstance().createZombie(type, position, laneIndex);
         // 添加调试日志，确认正在生成正确类型的僵尸
         System.out.println("生成僵尸: " + type.name() + " 在关卡 " + level);
@@ -2141,9 +2145,11 @@ private void initZombieImageConfig(){
             Position zombiePos = zombie.getPosition();
             Position projectilePos = projectile.getPosition();
 
+
             // 计算距离进行碰撞检测，忽略Y轴差异，只检查X轴距离
             double dx = projectilePos.x() - zombiePos.x();
             boolean collision = Math.abs(dx) <= 20; // 只检查X轴距离，忽略Y轴差异
+
 
             if (collision) {
 
