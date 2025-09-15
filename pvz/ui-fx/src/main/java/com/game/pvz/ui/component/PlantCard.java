@@ -15,7 +15,10 @@ public class PlantCard extends Button {
     private int cost;
     private boolean isReady;
     private Timeline cooldownTimeline;
+<<<<<<< HEAD
 
+=======
+>>>>>>> f301b6087c14b4819f630b2622fbff8764c4f319
     public PlantCard(String plantType, int cost) {
         this.plantType = plantType;
         this.cost = cost;
@@ -24,11 +27,18 @@ public class PlantCard extends Button {
     }
     
     private void initialize() {
+<<<<<<< HEAD
 
        // setText(plantType); // 设置按钮文本为植物类型名称
         //setFont(Font.font("Arial", FontWeight.BOLD, 12)); // 设置字体样式
         //setPrefSize(80, 150);
         //setStyle("-fx-background-color: #bc6c25; -fx-text-fill: white;");// 实现植物卡片的初始化逻辑
+=======
+        setText(plantType); // 设置按钮文本为植物类型名称
+        setFont(Font.font("Arial", FontWeight.BOLD, 12)); // 设置字体样式
+        setPrefSize(80, 150);
+        setStyle("-fx-background-color: #bc6c25; -fx-text-fill: white;");// 实现植物卡片的初始化逻辑
+>>>>>>> f301b6087c14b4819f630b2622fbff8764c4f319
     }
     
     public String getPlantType() {
