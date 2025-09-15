@@ -935,7 +935,6 @@ private void initZombieImageConfig(){
     public void stopBattle() {
         if (battleStarted) {
             battleStarted = false;
-            gameOver = false; // 重置游戏结束状态
             battleStatusText.setText("战斗已停止");
             startButton.setDisable(false);
             startButton.setText("开始战斗");
@@ -1001,7 +1000,9 @@ private void initZombieImageConfig(){
 
                             // 1. 计算初始位置（从右侧进入，与原有逻辑一致）
                             double x = 1200;
-                            double y = laneIndex * 82 + 5;
+
+                            double y = laneIndex * 82 - 20;
+
 
                             // 2. 创建僵尸容器（承载动画视图）
                             Pane zombieContainer = new Pane();
@@ -1519,7 +1520,9 @@ private void initZombieImageConfig(){
      */
     private void spawnZombie(ZombieType type, int laneIndex) {
         // 使用ZombieFactory创建僵尸实体
-        Position position = new Position(1200, laneIndex * 82 + 5);
+
+        Position position = new Position(1200, laneIndex * 82 - 20);
+
         Zombie zombie = ZombieFactory.getInstance().createZombie(type, position, laneIndex);
         // 添加调试日志，确认正在生成正确类型的僵尸
         System.out.println("生成僵尸: " + type.name() + " 在关卡 " + level);
@@ -2146,11 +2149,11 @@ private void initZombieImageConfig(){
             Position zombiePos = zombie.getPosition();
             Position projectilePos = projectile.getPosition();
 
-            // 计算距离进行碰撞检测（使用圆形碰撞检测，半径为15，与子弹大小匹配）
+
+            // 计算距离进行碰撞检测，忽略Y轴差异，只检查X轴距离
             double dx = projectilePos.x() - zombiePos.x();
-            double dy = projectilePos.y() - zombiePos.y();
-            double distance = Math.sqrt(dx * dx + dy * dy);
-            boolean collision = (distance <= 20); // 稍大于子弹半径，留出一点误差余量
+            boolean collision = Math.abs(dx) <= 20; // 只检查X轴距离，忽略Y轴差异
+
 
             if (collision) {
 
@@ -2198,7 +2201,6 @@ private void initZombieImageConfig(){
             cartView.setFitWidth(90);
             cartView.setFitHeight(60);
             cartView.setPreserveRatio(true); // 保持图片比例
-
             // 可选：图片加载前的占位样式（类似原矩形）
             cartView.setStyle("-fx-background-color: #8B4513;");
 
@@ -2455,7 +2457,7 @@ private void initZombieImageConfig(){
     private void checkGameVictory() {
         // 条件1：进度条已满（不再生成僵尸）
         // 条件2：所有僵尸已被消灭
-        if (stopSpawningZombies && zombies.isEmpty()) {
+        if (!gameOver&&stopSpawningZombies && zombies.isEmpty()) {
             gameOver = true;
             showGameVictoryDialog();
         }
